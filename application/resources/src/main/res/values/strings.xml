@@ -499,6 +499,13 @@
     <string name="enable_headset_detection_summary">Detect headset insertion and removal</string>
     <string name="enable_play_on_headset_insertion">Resume on headset insertion</string>
     <string name="enable_play_on_headset_insertion_summary">Pause otherwise</string>
+    <!-- Queue behaviour -->
+    <string name="play_now_mode">Tapping a track</string>
+    <string name="play_now_mode_summary">%s</string>
+    <string name="play_now_replace">Replaces the queue</string>
+    <string name="play_now_shuffle">Plays now, keeps a shuffled queue</string>
+    <string name="play_now_always">Plays now, keeps the queue</string>
+
     <!-- Volume normalization -->
     <string name="normalization_title">Volume normalization</string>
     <string name="normalization_summary">Even out the volume difference between tracks</string>

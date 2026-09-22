@@ -65,6 +65,7 @@ import org.videolan.vlc.media.MediaSessionBrowser
 import org.videolan.vlc.media.PlaylistManager
 import org.videolan.vlc.util.Permissions.canCheckBluetoothDevices
 import org.videolan.vlc.util.TextUtils
+import org.videolan.vlc.util.PlayNowMode
 import org.videolan.vlc.util.VoiceSearchMatcher
 import org.videolan.vlc.util.VoiceSearchParams
 import org.videolan.vlc.util.awaitMedialibraryStarted
@@ -315,7 +316,13 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
                         val tracks = context.getFromMl { audio }
                         if (tracks.isNotEmpty() && isActive) {
                             tracks.sortWith(MediaComparators.ANDROID_AUTO)
-                            loadMedia(tracks.toList(), pageOffset + position)
+                            val index = pageOffset + position
+                            // Same rule as on the phone: picking one track out of
+                            // a browse list should not throw away a shuffle-all or
+                            // playlist queue that is already running.
+                            if (!playNow(tracks.getOrNull(index))) {
+                                loadMedia(tracks.toList(), index)
+                            }
                         }
                     }
                     MediaSessionBrowser.ID_SEARCH -> {
@@ -376,6 +383,25 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
             // Pick a random first track if allowRandom is true and shuffle is enabled
             playbackService.load(mediaList, if (allowRandom && playbackService.isShuffling) SecureRandom().nextInt(min(mediaList.size, MEDIALIBRARY_PAGE_SIZE)) else position)
         }
+    }
+
+    /**
+     * Play one track while keeping the current queue, if the user's setting and
+     * the player state allow it.
+     *
+     * @return true when it was handled, false when the caller should load normally
+     */
+    private suspend fun playNow(media: MediaWrapper?): Boolean {
+        if (media == null) return false
+        val mode = PlayNowMode.current(Settings.getInstance(playbackService.applicationContext))
+        val keepQueue = when (mode) {
+            PlayNowMode.ALWAYS -> true
+            PlayNowMode.SHUFFLE -> playbackService.isShuffling
+            PlayNowMode.REPLACE -> false
+        }
+        if (!keepQueue) return false
+        if (playbackService.isCarMode()) media.addFlags(MediaWrapper.MEDIA_FORCE_AUDIO)
+        return playbackService.playNow(media)
     }
 
     private fun seek(position: Long) {

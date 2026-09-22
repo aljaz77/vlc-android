@@ -494,7 +494,11 @@ abstract class BaseAudioBrowser<T : MedialibraryViewModel> : MediaBrowserFragmen
 
     override fun onMainActionClick(v: View, position: Int, item: MediaLibraryItem) {
         when(getDefaultActionMediaType().getCurrentPlaybackAction(Settings.getInstance(requireActivity()))) {
-            DefaultPlaybackAction.PLAY -> MediaUtils.openList(activity, listOf(*item.tracks), 0)
+            DefaultPlaybackAction.PLAY -> when {
+                // A single track is a "play this one" tap and may keep the queue.
+                item.tracks.size == 1 -> MediaUtils.playTrack(activity, item.tracks[0])
+                else -> MediaUtils.openList(activity, listOf(*item.tracks), 0)
+            }
             DefaultPlaybackAction.ADD_TO_QUEUE -> MediaUtils.appendMedia(activity, listOf(*item.tracks))
             DefaultPlaybackAction.INSERT_NEXT -> MediaUtils.insertNext(activity, listOf(*item.tracks).toTypedArray())
             DefaultPlaybackAction.PLAY_ALL -> getCurrentProvider() ?.let { MediaUtils.playAll(activity, it, position, false) }

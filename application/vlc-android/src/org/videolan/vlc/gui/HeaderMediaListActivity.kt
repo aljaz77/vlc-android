@@ -67,6 +67,7 @@ import org.videolan.resources.util.parcelable
 import org.videolan.resources.util.parcelableList
 import org.videolan.tools.ALBUMS_SHOW_TRACK_NUMBER
 import org.videolan.tools.Settings
+import org.videolan.vlc.util.PlayNowMode
 import org.videolan.tools.copy
 import org.videolan.tools.dp
 import org.videolan.tools.isStarted
@@ -427,10 +428,21 @@ open class HeaderMediaListActivity : AudioPlayerContainerActivity(), IEventsHand
         } else {
             if (searchView.visibility == View.VISIBLE) UiTools.setKeyboardVisibility(v, false)
             if (isPlaylist)
-                MediaUtils.playTracks(this, viewModel.tracksProvider, position)
+                when {
+                    // Tapping one track in a playlist while something is already
+                    // queued should play that track, not replace the queue with
+                    // the whole playlist.
+                    PlayNowMode.current(Settings.getInstance(this)) != PlayNowMode.REPLACE &&
+                            item.tracks.size == 1 ->
+                        MediaUtils.playTrack(this, item.tracks[0])
+                    else -> MediaUtils.playTracks(this, viewModel.tracksProvider, position)
+                }
             else
                 when(DefaultPlaybackActionMediaType.TRACK.getCurrentPlaybackAction(Settings.getInstance(this))) {
-                    DefaultPlaybackAction.PLAY -> MediaUtils.openList(this, listOf(*item.tracks), 0)
+                    DefaultPlaybackAction.PLAY -> when {
+                        item.tracks.size == 1 -> MediaUtils.playTrack(this, item.tracks[0])
+                        else -> MediaUtils.openList(this, listOf(*item.tracks), 0)
+                    }
                     DefaultPlaybackAction.ADD_TO_QUEUE -> MediaUtils.appendMedia(this, listOf(*item.tracks))
                     DefaultPlaybackAction.INSERT_NEXT -> MediaUtils.insertNext(this, listOf(*item.tracks).toTypedArray())
                     DefaultPlaybackAction.PLAY_ALL -> MediaUtils.playTracks(this, viewModel.tracksProvider, position)
@@ -489,7 +501,10 @@ open class HeaderMediaListActivity : AudioPlayerContainerActivity(), IEventsHand
     }
 
     override fun onMainActionClick(v: View, position: Int, item: MediaLibraryItem) {
-        MediaUtils.openList(this, listOf(*item.tracks), 0)
+        when {
+            item.tracks.size == 1 -> MediaUtils.playTrack(this, item.tracks[0])
+            else -> MediaUtils.openList(this, listOf(*item.tracks), 0)
+        }
     }
 
     override fun onStartDrag(viewHolder: RecyclerView.ViewHolder) {

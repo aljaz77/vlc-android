@@ -969,6 +969,29 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     }
 
     /**
+     * Play one track immediately without discarding the current queue.
+     *
+     * If the track is already queued, jump to it. Otherwise insert it directly
+     * after the current track and skip to it, so whatever was coming next still
+     * comes next afterwards. Because the insert goes into the already shuffled
+     * list, a shuffle queue survives untouched rather than being regenerated.
+     *
+     * @return false if there is no queue to preserve, in which case the caller
+     * should load the track normally
+     */
+    suspend fun playNow(media: MediaWrapper): Boolean {
+        if (!hasMedia()) return false
+        val existing = playlistManager.getMediaList().indexOfFirst { it.uri == media.uri }
+        if (existing >= 0) {
+            playlistManager.playIndex(existing)
+            return true
+        }
+        playlistManager.insertNext(listOf(media))
+        playlistManager.playIndex(playlistManager.currentIndex + 1)
+        return true
+    }
+
+    /**
      * Re-read the normalization preferences and push them into the device effect.
      *
      * Safe to call at any time: it attaches, retunes or detaches the effect as

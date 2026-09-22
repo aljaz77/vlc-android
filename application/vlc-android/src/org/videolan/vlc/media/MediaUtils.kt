@@ -50,6 +50,7 @@ import org.videolan.resources.interfaces.ResumableList
 import org.videolan.resources.util.getFromMl
 import org.videolan.tools.AppScope
 import org.videolan.tools.Settings
+import org.videolan.vlc.util.PlayNowMode
 import org.videolan.tools.localBroadcastManager
 import org.videolan.tools.markBidi
 import org.videolan.vlc.PlaybackService
@@ -179,6 +180,32 @@ object MediaUtils {
     fun insertNext(context: Context?, media: MediaWrapper?) {
         if (media == null || context == null) return
         insertNext(context, arrayOf(media))
+    }
+
+    /**
+     * Play a single track, keeping the current queue if the user asked for that.
+     *
+     * This is the "tapped one track in a list" path. Replacing a shuffle-all or
+     * playlist queue because of a single tap loses everything that was lined up,
+     * so [PlayNowMode] decides whether to insert and jump instead.
+     *
+     * Falls back to loading normally when there is no queue to preserve.
+     */
+    fun playTrack(context: Context?, media: MediaWrapper?) {
+        if (media == null || context == null) return
+        val mode = PlayNowMode.current(Settings.getInstance(context))
+        if (mode == PlayNowMode.REPLACE) {
+            openList(context, listOf(media), 0)
+            return
+        }
+        SuspendDialogCallback(context) { service ->
+            val keepQueue = when (mode) {
+                PlayNowMode.ALWAYS -> true
+                PlayNowMode.SHUFFLE -> service.isShuffling
+                PlayNowMode.REPLACE -> false
+            }
+            if (!keepQueue || !service.playNow(media)) service.load(listOf(media), 0)
+        }
     }
 
     fun openMedia(context: Context?, media: MediaWrapper?) {

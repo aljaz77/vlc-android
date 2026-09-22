@@ -537,6 +537,17 @@
         <item>Windows-1258</item>
     </string-array>
 
+    <string-array name="play_now_modes">
+        <item>@string/play_now_always</item>
+        <item>@string/play_now_shuffle</item>
+        <item>@string/play_now_replace</item>
+    </string-array>
+    <string-array name="play_now_modes_values" translatable="false">
+        <item>always</item>
+        <item>shuffle</item>
+        <item>replace</item>
+    </string-array>
+
     <string-array name="normalization_targets">
         <item>@string/normalization_target_quiet</item>
         <item>@string/normalization_target_standard</item>

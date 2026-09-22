@@ -66,6 +66,15 @@
             app:singleLineTitle="false" />
     </PreferenceCategory>
 
+    <ListPreference
+        android:defaultValue="always"
+        android:entries="@array/play_now_modes"
+        android:entryValues="@array/play_now_modes_values"
+        android:key="play_now_mode"
+        android:summary="@string/play_now_mode_summary"
+        android:title="@string/play_now_mode"
+        app:singleLineTitle="false"/>
+
     <PreferenceScreen
         android:key="normalization_category"
         android:summary="@string/normalization_summary"

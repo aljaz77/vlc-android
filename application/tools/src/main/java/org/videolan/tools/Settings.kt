@@ -421,6 +421,9 @@ const val KEY_NORMALIZATION_APPLY_TO_VIDEO = "normalization_apply_to_video"
 const val KEY_NORMALIZATION_ALBUM_MODE = "normalization_album_mode"
 const val KEY_NORMALIZATION_ANALYSIS_ENABLED = "normalization_analysis_enabled"
 
+//Queue behaviour
+const val KEY_PLAY_NOW_MODE = "play_now_mode"
+
 //Auto
 const val KEY_ANDROID_AUTO_QUEUE_FORMAT_VAL = "android_auto_queue_format_val"
 const val KEY_ANDROID_AUTO_QUEUE_INFO_POS_VAL = "android_auto_queue_info_pos_val"
