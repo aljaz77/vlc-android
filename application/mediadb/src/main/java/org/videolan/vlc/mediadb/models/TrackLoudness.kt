@@ -45,12 +45,5 @@ data class TrackLoudness(
 ) {
     companion object {
         const val CURRENT_ANALYZER_VERSION = 1
-
-        /**
-         * Loudness reported for a track that turned out to be silent, or so quiet
-         * that every gating block fell below the absolute gate. Stored rather than
-         * discarded so the track is not queued for analysis again on every play.
-         */
-        const val SILENT_LUFS = -70.0
     }
 }
