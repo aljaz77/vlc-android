@@ -544,6 +544,18 @@
     <string name="normalization_apply_to_video">Apply to video too</string>
     <string name="normalization_apply_to_video_summary">Normalize the soundtrack of videos as well as music</string>
 
+    <string name="normalization_analysis_category">Loudness analysis</string>
+    <string name="normalization_analysis_enabled">Measure tracks as they play</string>
+    <string name="normalization_analysis_enabled_summary">Measure the real loudness of each track in the background, so it can be levelled exactly next time it plays. No tags needed.</string>
+    <string name="normalization_analyze_library">Analyze the whole library now</string>
+    <string name="normalization_analyze_library_summary">%1$d of %2$d tracks measured</string>
+    <string name="normalization_analyze_running">Measuring %1$d of %2$d</string>
+    <string name="normalization_analyze_cancel">Measuring. Tap to stop.</string>
+    <string name="normalization_analyze_done">Finished measuring the library</string>
+    <string name="normalization_clear_analysis">Discard measurements</string>
+    <string name="normalization_clear_analysis_summary">Delete every stored loudness measurement and start again</string>
+    <string name="normalization_clear_analysis_done">Measurements discarded</string>
+
     <string name="normalization_restart_warning">Playback will restart briefly to apply this change</string>
     <string name="normalization_live_change">Applies instantly, without interrupting playback</string>
 

@@ -22,6 +22,7 @@ package org.videolan.resources.normalization
 
 import android.content.SharedPreferences
 import org.videolan.tools.KEY_NORMALIZATION_ALBUM_MODE
+import org.videolan.tools.KEY_NORMALIZATION_ANALYSIS_ENABLED
 import org.videolan.tools.KEY_NORMALIZATION_APPLY_TO_VIDEO
 import org.videolan.tools.KEY_NORMALIZATION_CUSTOM_TARGET
 import org.videolan.tools.KEY_NORMALIZATION_ENABLED
@@ -128,7 +129,9 @@ data class NormalizationConfig(
     val maxBoostDb: Double,
     val applyToVideo: Boolean,
     /** Use album rather than track ReplayGain, preserving relative loudness within an album. */
-    val albumMode: Boolean
+    val albumMode: Boolean,
+    /** Measure tracks in the background as they are played. */
+    val analyzeWhilePlaying: Boolean
 ) {
 
     /** The effective target, resolving [LoudnessTarget.CUSTOM]. */
@@ -267,7 +270,8 @@ data class NormalizationConfig(
             maxBoostDb = prefs.getString(KEY_NORMALIZATION_MAX_BOOST, null)
                 ?.toDoubleOrNull() ?: DEFAULT_MAX_BOOST_DB,
             applyToVideo = prefs.getBoolean(KEY_NORMALIZATION_APPLY_TO_VIDEO, false),
-            albumMode = prefs.getBoolean(KEY_NORMALIZATION_ALBUM_MODE, false)
+            albumMode = prefs.getBoolean(KEY_NORMALIZATION_ALBUM_MODE, false),
+            analyzeWhilePlaying = prefs.getBoolean(KEY_NORMALIZATION_ANALYSIS_ENABLED, true)
         )
     }
 }

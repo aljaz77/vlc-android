@@ -270,6 +270,12 @@ val migration_36_37 = object:Migration(36, 37) {
     }
 }
 
+val migration_37_38 = object : Migration(37, 38) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("CREATE TABLE IF NOT EXISTS `track_loudness` (`media_uri` TEXT NOT NULL, `integrated_lufs` REAL NOT NULL, `sample_peak_db` REAL NOT NULL, `analyzed_at` INTEGER NOT NULL, `analyzer_version` INTEGER NOT NULL, PRIMARY KEY(`media_uri`))")
+    }
+}
+
 @OptIn(DelicateCoroutinesApi::class)
 fun populateDB(context: Context) = GlobalScope.launch(Dispatchers.IO) {
     val uris = listOf(AndroidDevices.MediaFolders.EXTERNAL_PUBLIC_MOVIES_DIRECTORY_URI,

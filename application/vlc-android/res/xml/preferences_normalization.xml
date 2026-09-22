@@ -104,4 +104,33 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:key="normalization_analysis_category"
+        android:title="@string/normalization_analysis_category"
+        app:iconSpaceReserved="false">
+
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:dependency="normalization_enabled"
+            android:key="normalization_analysis_enabled"
+            android:summary="@string/normalization_analysis_enabled_summary"
+            android:title="@string/normalization_analysis_enabled"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+        <Preference
+            android:key="normalization_analyze_library"
+            android:title="@string/normalization_analyze_library"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+        <Preference
+            android:key="normalization_clear_analysis"
+            android:summary="@string/normalization_clear_analysis_summary"
+            android:title="@string/normalization_clear_analysis"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+    </PreferenceCategory>
+
 </androidx.preference.PreferenceScreen>

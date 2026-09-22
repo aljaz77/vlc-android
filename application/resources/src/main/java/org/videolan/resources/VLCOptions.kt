@@ -321,6 +321,14 @@ object VLCOptions {
         } /* else automatic: use default options */
 
         if (noVideo) media.addOption(":no-video")
+        // Normalization is aimed at music. When it is not wanted for video, turn
+        // the libVLC side of it off for this media only, so the setting does not
+        // require rebuilding the whole instance.
+        val normalization = NormalizationConfig.from(prefs)
+        if (normalization.enabled && !normalization.applyToVideo && !noVideo) {
+            media.addOption(":audio-replay-gain-mode=none")
+            media.addOption(":audio-filter=")
+        }
         if (paused) media.addOption(":start-paused")
         if (!prefs.getBoolean(KEY_SUBTITLES_AUTOLOAD, true)) media.addOption(":sub-language=none")
 

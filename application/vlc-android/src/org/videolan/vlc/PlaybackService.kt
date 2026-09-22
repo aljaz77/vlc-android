@@ -132,6 +132,7 @@ import org.videolan.resources.VLCInstance
 import org.videolan.resources.VLCOptions
 import org.videolan.resources.normalization.NormalizationConfig
 import org.videolan.vlc.audio.DeviceNormalizer
+import org.videolan.vlc.audio.LoudnessRepository
 import org.videolan.resources.WEARABLE_RESERVE_SLOT_SKIP_TO_NEXT
 import org.videolan.resources.WEARABLE_RESERVE_SLOT_SKIP_TO_PREV
 import org.videolan.resources.WEARABLE_SHOW_CUSTOM_ACTION
@@ -978,7 +979,40 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
      * needs VLCInstance.restart() instead.
      */
     fun applyNormalization() {
-        deviceNormalizer.setConfig(NormalizationConfig.from(settings))
+        val config = NormalizationConfig.from(settings)
+        deviceNormalizer.setConfig(config)
+        updateTrackLoudness(config)
+    }
+
+    /**
+     * Look up the measured loudness of the current track and hand it to the
+     * normalizer, then make sure the current and next tracks are measured.
+     *
+     * Measuring a track takes a few seconds, so the track that triggers the
+     * analysis does not benefit from it. Queueing the next one as well means
+     * that in practice almost everything is measured before it plays.
+     */
+    private fun updateTrackLoudness(config: NormalizationConfig) {
+        val media = currentMediaWrapper
+        val uri = media?.uri
+        val skip = !config.enabled || !config.method.usesMeasuredLoudness || uri == null ||
+                (media.type == MediaWrapper.TYPE_VIDEO && !config.applyToVideo)
+        if (skip) {
+            deviceNormalizer.setTrackLoudness(null, null)
+            return
+        }
+        lifecycleScope.launch {
+            val loudness = LoudnessRepository.get(applicationContext, uri)
+            // The track can change while the lookup is in flight; applying a gain
+            // measured for the previous one would be worse than applying none.
+            if (currentMediaWrapper?.uri != uri) return@launch
+            deviceNormalizer.setTrackLoudness(loudness?.integratedLufs, loudness?.samplePeakDb)
+            if (!config.analyzeWhilePlaying) return@launch
+            if (loudness == null) LoudnessRepository.requestAnalysis(applicationContext, uri)
+            playlistManager.getNextMedia()?.uri?.let {
+                LoudnessRepository.requestAnalysis(applicationContext, it)
+            }
+        }
     }
 
     private fun sendStartSessionIdIntent() {

@@ -30,12 +30,18 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
+import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.resources.VLCInstance
 import org.videolan.resources.normalization.LoudnessTarget
 import org.videolan.resources.normalization.NormalizationConfig
 import org.videolan.resources.normalization.NormalizationMethod
 import org.videolan.tools.KEY_NORMALIZATION_ALBUM_MODE
+import org.videolan.tools.KEY_NORMALIZATION_ANALYSIS_ENABLED
 import org.videolan.tools.KEY_NORMALIZATION_APPLY_TO_VIDEO
 import org.videolan.tools.KEY_NORMALIZATION_CUSTOM_TARGET
 import org.videolan.tools.KEY_NORMALIZATION_ENABLED
@@ -47,6 +53,8 @@ import org.videolan.tools.KEY_NORMALIZATION_TARGET
 import org.videolan.tools.putSingle
 import org.videolan.vlc.PlaybackService
 import org.videolan.vlc.R
+import org.videolan.vlc.audio.LoudnessRepository
+import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.restartMediaPlayer
 
 /**
@@ -62,6 +70,9 @@ class PreferencesNormalization : BasePreferenceFragment(),
 
     /** The configuration libVLC is currently built with. */
     private var appliedConfig: NormalizationConfig? = null
+
+    /** The running full library scan, so tapping again can stop it. */
+    private var analysisJob: Job? = null
 
     override fun getXml() = R.xml.preferences_normalization
 
@@ -89,6 +100,78 @@ class PreferencesNormalization : BasePreferenceFragment(),
     override fun onStart() {
         super.onStart()
         preferenceScreen.sharedPreferences!!.registerOnSharedPreferenceChangeListener(this)
+        lifecycleScope.launch {
+            LoudnessRepository.analysisProgress.collectLatest { updateAnalysisSummary(it) }
+        }
+    }
+
+    override fun onPreferenceTreeClick(preference: Preference): Boolean {
+        when (preference.key) {
+            KEY_ANALYZE_LIBRARY -> {
+                // A second tap while a scan is running stops it rather than
+                // starting a second one.
+                analysisJob?.let {
+                    it.cancel()
+                    analysisJob = null
+                    return true
+                }
+                startLibraryAnalysis()
+                return true
+            }
+            KEY_CLEAR_ANALYSIS -> {
+                lifecycleScope.launch {
+                    LoudnessRepository.clear(requireContext())
+                    updateAnalysisSummary(null)
+                    UiTools.snacker(requireActivity(), getString(R.string.normalization_clear_analysis_done))
+                }
+                return true
+            }
+        }
+        return super.onPreferenceTreeClick(preference)
+    }
+
+    /**
+     * Measure every audio track in the library that has not been measured yet.
+     *
+     * Tied to the fragment's lifecycle: leaving the screen stops the scan, which
+     * is the honest behaviour given there is no foreground service behind it.
+     * Tracks already measured are kept, so restarting picks up where it left off.
+     */
+    private fun startLibraryAnalysis() {
+        val context = requireContext().applicationContext
+        analysisJob = lifecycleScope.launch {
+            val tracks = withContext(Dispatchers.IO) {
+                Medialibrary.getInstance().audio
+                    ?.mapNotNull { mw -> mw.uri?.let { it to mw.title } }
+                    ?: emptyList()
+            }
+            LoudnessRepository.analyzeAll(context, tracks)
+            analysisJob = null
+            if (isAdded) {
+                UiTools.snacker(requireActivity(), getString(R.string.normalization_analyze_done))
+                updateAnalysisSummary(null)
+            }
+        }
+    }
+
+    /**
+     * Show either live scan progress or how much of the library is measured.
+     */
+    private suspend fun updateAnalysisSummary(progress: LoudnessRepository.AnalysisProgress?) {
+        val preference = findPreference<Preference>(KEY_ANALYZE_LIBRARY) ?: return
+        if (progress != null) {
+            val running = getString(
+                R.string.normalization_analyze_running, progress.done + 1, progress.total
+            )
+            preference.summary = running + System.lineSeparator() +
+                    getString(R.string.normalization_analyze_cancel)
+            return
+        }
+        val context = context?.applicationContext ?: return
+        val analyzed = LoudnessRepository.analyzedCount(context)
+        val total = withContext(Dispatchers.IO) { Medialibrary.getInstance().audioCount }
+        preference.summary =
+            getString(R.string.normalization_analyze_library_summary, analyzed, total)
     }
 
     override fun onStop() {
@@ -111,7 +194,8 @@ class PreferencesNormalization : BasePreferenceFragment(),
             }
             KEY_NORMALIZATION_ENABLED, KEY_NORMALIZATION_METHOD, KEY_NORMALIZATION_TARGET,
             KEY_NORMALIZATION_STRENGTH, KEY_NORMALIZATION_PEAK_LIMITER,
-            KEY_NORMALIZATION_ALBUM_MODE, KEY_NORMALIZATION_APPLY_TO_VIDEO -> Unit
+            KEY_NORMALIZATION_ALBUM_MODE, KEY_NORMALIZATION_APPLY_TO_VIDEO,
+            KEY_NORMALIZATION_ANALYSIS_ENABLED -> Unit
             else -> return
         }
         updateSummaries()
@@ -205,5 +289,8 @@ class PreferencesNormalization : BasePreferenceFragment(),
     companion object {
         /** Beyond this a boost stops being normalization and starts being distortion. */
         private const val MAX_BOOST_CEILING_DB = 24.0
+
+        private const val KEY_ANALYZE_LIBRARY = "normalization_analyze_library"
+        private const val KEY_CLEAR_ANALYSIS = "normalization_clear_analysis"
     }
 }
