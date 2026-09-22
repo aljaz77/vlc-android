@@ -154,8 +154,13 @@ task generateSources(type: Jar) {
 }
 
 dependencies {
-    devApi project(':libvlcjni:libvlc')
-    devApi project(':medialibrary')
+    // The 'dev' flavour builds libVLC from source and needs the separate libvlcjni
+    // checkout. Only wire it up when that checkout is actually present, so the
+    // debug/release flavours can still configure against the published AARs.
+    if (findProject(':libvlcjni:libvlc') != null) {
+        devApi project(':libvlcjni:libvlc')
+        devApi project(':medialibrary')
+    }
     debugApi "org.videolan.android:libvlc-all:$rootProject.ext.libvlcVersion"
     debugApi "org.videolan.android:medialibrary-all:$rootProject.ext.medialibraryVersion"
     releaseApi "org.videolan.android:libvlc-all:$rootProject.ext.libvlcVersion"

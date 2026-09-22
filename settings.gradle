@@ -18,7 +18,15 @@ android {
     buildToolsVersion = '36.0.0'
 }
 
-include ':libvlcjni:libvlc', ':medialibrary'
+// The libvlcjni sources live in a separate VideoLAN repository and are only
+// needed by the 'dev' flavour, which compiles libVLC from source with the NDK.
+// The debug/release flavours resolve libvlc + medialibrary from Maven instead,
+// so only include these projects when their sources are actually checked out.
+// ':medialibrary' itself depends on ':libvlcjni:libvlc', so both stand or fall together.
+if (file('libvlcjni/libvlc').exists()) {
+    include ':libvlcjni:libvlc'
+    include ':medialibrary'
+}
 include ':application:tools', ':application:resources', ':application:mediadb', ':application:app', ':application:live-plot-graph', ':application:television', ':application:donations', ':application:remote-access-server'
 include ':application:vlc-android'
 include ':application:moviepedia'
