@@ -73,8 +73,15 @@ enum class LoudnessTarget(val key: String, val lufs: Double) {
  */
 enum class NormalizationMethod(val key: String, val needsLibVlcRestart: Boolean) {
     /**
-     * Measured loudness where we have it, ReplayGain tags where we don't, and a
-     * gentle compressor underneath to catch everything else.
+     * Measured loudness where we have it, with a gentle compressor underneath to
+     * catch whatever has not been measured yet.
+     *
+     * Deliberately does not also run libVLC's ReplayGain stage. Both compute the
+     * same correction, target minus track loudness, so running them together
+     * applied it twice and overshot by roughly a factor of two on any track that
+     * had both tags and a measurement. Our own measurement covers every track
+     * once analysed rather than only tagged ones, so it wins; anyone who would
+     * rather rely on tags alone can select [REPLAYGAIN] explicitly.
      */
     AUTO("auto", true),
 
@@ -93,9 +100,14 @@ enum class NormalizationMethod(val key: String, val needsLibVlcRestart: Boolean)
     /** Android's own DynamicsProcessing / LoudnessEnhancer on VLC's audio session. */
     DEVICE("device", false);
 
-    /** Whether this method wants libVLC's ReplayGain stage switched on. */
+    /**
+     * Whether this method wants libVLC's ReplayGain stage switched on.
+     *
+     * Only [REPLAYGAIN]. See the note on [AUTO] for why it must not be combined
+     * with the measured loudness stage.
+     */
     val usesReplayGain: Boolean
-        get() = this == AUTO || this == REPLAYGAIN
+        get() = this == REPLAYGAIN
 
     /** Whether this method wants a per track gain from the loudness database. */
     val usesMeasuredLoudness: Boolean

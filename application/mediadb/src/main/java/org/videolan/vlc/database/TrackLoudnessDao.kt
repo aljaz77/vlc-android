@@ -20,6 +20,9 @@ interface TrackLoudnessDao {
     @Query("SELECT * FROM track_loudness WHERE media_uri = :uri AND analyzer_version = :version")
     fun get(uri: String, version: Int): TrackLoudness?
 
+    @Query("SELECT media_uri FROM track_loudness WHERE analyzer_version = :version")
+    fun analyzedUris(version: Int): List<String>
+
     @Query("SELECT COUNT(*) FROM track_loudness WHERE analyzer_version = :version")
     fun count(version: Int): Int
 

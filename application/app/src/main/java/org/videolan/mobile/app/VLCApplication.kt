@@ -28,6 +28,7 @@ import androidx.multidex.MultiDexApplication
 import org.videolan.libvlc.Dialog
 import org.videolan.tools.BitmapCache
 import org.videolan.vlc.ArtworkProvider
+import org.videolan.vlc.audio.LoudnessRepository
 import org.videolan.vlc.util.DialogDelegate
 
 private const val TAG = "VLC/VLCApplication"
@@ -42,6 +43,10 @@ class VLCApplication : MultiDexApplication(), Dialog.Callbacks by DialogDelegate
     override fun onCreate() {
         setupApplication()
         super.onCreate()
+        // Pick up tracks added to the library and measure their loudness in the
+        // background, so volume normalization has a figure to work from without
+        // the user having to rescan by hand.
+        LoudnessRepository.startWatchingLibrary(this)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

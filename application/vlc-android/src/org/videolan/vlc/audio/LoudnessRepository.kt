@@ -25,33 +25,40 @@ import android.net.Uri
 import android.util.Log
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.videolan.medialibrary.interfaces.Medialibrary
+import org.videolan.resources.normalization.NormalizationConfig
 import org.videolan.tools.AppScope
+import org.videolan.tools.KEY_NORMALIZATION_ANALYSIS_ENABLED
+import org.videolan.tools.Settings
 import org.videolan.vlc.database.MediaDatabase
 import org.videolan.vlc.database.TrackLoudnessDao
 import org.videolan.vlc.mediadb.models.TrackLoudness
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG = "VLC/LoudnessRepository"
 
 /**
  * Stores and serves per track loudness measurements.
  *
- * Analysis happens opportunistically rather than as one huge library sweep: when
- * a track is about to play and has never been measured, it is queued. The
- * measurement misses the track it was triggered by but is ready for every play
- * after that, and queueing the *next* track in the queue while the current one
- * plays means most tracks are measured before they are needed. A full library
- * scan is available from settings for anyone who would rather not wait.
+ * Measurements arrive three ways. Tracks are queued as they play, so a library
+ * converges on being fully measured as it is listened to. New tracks are picked
+ * up automatically when the medialibrary reports additions. And the settings
+ * screen can sweep the whole library in one go.
  *
- * Requests are processed one at a time. Analysis is CPU and codec heavy, and
- * running several at once would compete with the decoder doing the actual
- * playback.
+ * The two background paths deliberately decode one track at a time so they stay
+ * out of the way of playback. The user driven sweep runs several in parallel,
+ * since nothing else is competing for the decoders while it runs.
  */
 object LoudnessRepository {
 
@@ -73,12 +80,20 @@ object LoudnessRepository {
 
     private val _analysisProgress = MutableStateFlow<AnalysisProgress?>(null)
 
-    /** Progress of a running full library scan, or null when none is running. */
+    /** Progress of a running full library sweep, or null when none is running. */
     val analysisProgress: StateFlow<AnalysisProgress?> = _analysisProgress
 
     data class AnalysisProgress(val done: Int, val total: Int, val currentTitle: String?)
 
     private data class Request(val context: Context, val uri: Uri)
+
+    private var watchingLibrary = false
+    private var sweepJob: Job? = null
+    private var fullSweepJob: Job? = null
+
+    /** Whether a full library sweep is running right now. */
+    val isSweeping: Boolean
+        get() = fullSweepJob?.isActive == true
 
     init {
         startWorker()
@@ -110,40 +125,153 @@ object LoudnessRepository {
      */
     fun requestAnalysis(context: Context, uri: Uri) {
         val key = uri.toString()
-        if (cache.containsKey(key) || undecodable.contains(key) || !pending.add(key)) return
+        if (cache.containsKey(key) || undecodable.contains(key) || pending.contains(key)) return
         val applicationContext = context.applicationContext
         AppScope.launch {
             // Check the database before spending a decode on it.
-            if (get(applicationContext, uri) != null) {
-                pending.remove(key)
-                return@launch
-            }
-            requests.trySend(Request(applicationContext, uri))
+            if (get(applicationContext, uri) != null) return@launch
+            enqueue(applicationContext, uri)
+        }
+    }
+
+    /** Convenience for callers that only have a string location. */
+    fun requestAnalysis(context: Context, location: String?) {
+        if (location.isNullOrEmpty()) return
+        requestAnalysis(context, location.toUri())
+    }
+
+    /**
+     * Hand a track to the background worker, skipping the database check.
+     *
+     * Callers that have already established a track is unmeasured use this, so
+     * that sweeping a large library does not issue a query per track twice over.
+     */
+    private fun enqueue(context: Context, uri: Uri) {
+        if (!pending.add(uri.toString())) return
+        requests.trySend(Request(context.applicationContext, uri))
+    }
+
+    /**
+     * Measure every track in [tracks] that has not been measured yet, reporting
+     * progress through [analysisProgress].
+     *
+     * Decodes several tracks in parallel. Cancelling the calling job stops it,
+     * and anything already measured is kept, so restarting resumes rather than
+     * starting from the beginning.
+     */
+    suspend fun analyzeAll(context: Context, tracks: List<Pair<Uri, String?>>) = coroutineScope {
+        val applicationContext = context.applicationContext
+        val outstanding = tracks.filterNot { undecodable.contains(it.first.toString()) }
+        val total = outstanding.size
+        val done = AtomicInteger()
+
+        val queue = Channel<Pair<Uri, String?>>(Channel.UNLIMITED)
+        outstanding.forEach { queue.trySend(it) }
+        queue.close()
+
+        try {
+            _analysisProgress.value = AnalysisProgress(0, total, null)
+            List(sweepConcurrency()) {
+                launch(Dispatchers.Default) {
+                    for ((uri, title) in queue) {
+                        _analysisProgress.value = AnalysisProgress(done.get(), total, title)
+                        if (get(applicationContext, uri) == null) {
+                            measure(applicationContext, uri)
+                        }
+                        done.incrementAndGet()
+                    }
+                }
+            }.joinAll()
+            _analysisProgress.value = AnalysisProgress(done.get(), total, null)
+        } finally {
+            _analysisProgress.value = null
         }
     }
 
     /**
-     * Measure every audio track in [uris] that has not been measured yet,
-     * reporting progress through [analysisProgress].
+     * Measure the whole library, in the background.
      *
-     * Runs on the caller's coroutine so it can be cancelled by cancelling that
-     * job. Only one scan is useful at a time.
+     * Deliberately not scoped to whichever screen started it: a library of any
+     * size takes minutes, and having it die because the user navigated away
+     * would mean it could never finish. It runs for as long as the process does,
+     * or until [cancelFullSweep].
      */
-    suspend fun analyzeAll(context: Context, uris: List<Pair<Uri, String?>>) {
+    fun startFullSweep(context: Context) {
+        if (isSweeping) return
         val applicationContext = context.applicationContext
-        val outstanding = uris.filterNot { undecodable.contains(it.first.toString()) }
-        var done = 0
-        try {
-            for ((uri, title) in outstanding) {
-                _analysisProgress.value = AnalysisProgress(done, outstanding.size, title)
-                if (get(applicationContext, uri) == null) {
-                    measure(applicationContext, uri)
-                }
-                done++
+        fullSweepJob = AppScope.launch(Dispatchers.Default) {
+            val tracks = withContext(Dispatchers.IO) {
+                Medialibrary.getInstance().audio
+                    ?.mapNotNull { mw -> mw.uri?.let { it to mw.title } }
+                    ?: emptyList()
             }
-            _analysisProgress.value = AnalysisProgress(done, outstanding.size, null)
-        } finally {
-            _analysisProgress.value = null
+            analyzeAll(applicationContext, tracks)
+        }
+    }
+
+    fun cancelFullSweep() {
+        fullSweepJob?.cancel()
+        fullSweepJob = null
+    }
+
+    /**
+     * Queue every audio track in the library that has no measurement yet.
+     *
+     * Goes through the single track background worker rather than the parallel
+     * sweep, because this runs unprompted and should not be noticeable.
+     */
+    suspend fun analyzeMissing(context: Context) {
+        val applicationContext = context.applicationContext
+        val analyzed = withContext(Dispatchers.IO) {
+            try {
+                dao(applicationContext)
+                    .analyzedUris(TrackLoudness.CURRENT_ANALYZER_VERSION)
+                    .toHashSet()
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not list measured tracks", e)
+                null
+            }
+        } ?: return
+
+        val missing = withContext(Dispatchers.IO) {
+            Medialibrary.getInstance().audio
+                ?.mapNotNull { it.uri }
+                ?.filter { it.toString() !in analyzed && it.toString() !in undecodable }
+                ?: emptyList()
+        }
+        if (missing.isEmpty()) return
+        Log.i(TAG, "Queueing ${missing.size} unmeasured tracks for loudness analysis")
+        missing.forEach { enqueue(applicationContext, it) }
+    }
+
+    /**
+     * Watch the medialibrary and measure tracks as they are added.
+     *
+     * Called once at application start. A scan reports additions in bursts, so
+     * the sweep is debounced rather than run once per track.
+     */
+    fun startWatchingLibrary(context: Context) {
+        if (watchingLibrary) return
+        watchingLibrary = true
+        val applicationContext = context.applicationContext
+        Medialibrary.getInstance().addMediaCb(object : Medialibrary.MediaCb {
+            override fun onMediaAdded() = scheduleSweep(applicationContext)
+            override fun onMediaModified() {}
+            override fun onMediaDeleted(id: LongArray?) {}
+            override fun onMediaConvertedToExternal(id: LongArray?) {}
+        })
+    }
+
+    private fun scheduleSweep(context: Context) {
+        sweepJob?.cancel()
+        sweepJob = AppScope.launch(Dispatchers.Default) {
+            delay(SWEEP_DEBOUNCE_MS)
+            val settings = Settings.getInstance(context)
+            if (!settings.getBoolean(KEY_NORMALIZATION_ANALYSIS_ENABLED, true)) return@launch
+            val config = NormalizationConfig.from(settings)
+            // No point measuring for a method that will not use the result.
+            if (!config.enabled || !config.method.usesMeasuredLoudness) return@launch
+            analyzeMissing(context)
         }
     }
 
@@ -168,6 +296,7 @@ object LoudnessRepository {
         }
         cache.clear()
         undecodable.clear()
+        pending.clear()
     }
 
     /**
@@ -205,12 +334,20 @@ object LoudnessRepository {
         }
     }
 
+    /**
+     * How many tracks to decode at once during a user driven sweep.
+     *
+     * Half the cores, capped: the decoders rather than the CPU are the
+     * bottleneck, and leaving headroom keeps the phone usable while it works.
+     */
+    private fun sweepConcurrency() =
+        (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, MAX_SWEEP_CONCURRENCY)
+
     private fun dao(context: Context): TrackLoudnessDao =
         MediaDatabase.getInstance(context).trackLoudnessDao()
 
-    /** Convenience for callers that only have a string location. */
-    fun requestAnalysis(context: Context, location: String?) {
-        if (location.isNullOrEmpty()) return
-        requestAnalysis(context, location.toUri())
-    }
+    private const val MAX_SWEEP_CONCURRENCY = 4
+
+    /** A library scan reports additions in bursts; wait for it to settle. */
+    private const val SWEEP_DEBOUNCE_MS = 10_000L
 }

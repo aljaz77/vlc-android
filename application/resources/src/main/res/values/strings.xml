@@ -537,7 +537,7 @@
     <string name="normalization_method_leveler">Volume leveler</string>
     <string name="normalization_method_device">Device limiter</string>
 
-    <string name="normalization_method_auto_desc">Measured loudness where available, Replay Gain tags otherwise, with gentle compression underneath. Recommended.</string>
+    <string name="normalization_method_auto_desc">Measured loudness where available, with gentle compression for anything not measured yet. Recommended.</string>
     <string name="normalization_method_replaygain_desc">Uses the Replay Gain tags written into your files. Exact, but does nothing for untagged tracks.</string>
     <string name="normalization_method_measured_desc">Uses loudness measured by VLC itself. Needs the library analysis below.</string>
     <string name="normalization_method_compressor_desc">Squeezes the dynamic range so loud and quiet parts sit closer together. Works on anything, no tags needed.</string>
@@ -556,8 +556,8 @@
     <string name="normalization_apply_to_video_summary">Normalize the soundtrack of videos as well as music</string>
 
     <string name="normalization_analysis_category">Loudness analysis</string>
-    <string name="normalization_analysis_enabled">Measure tracks as they play</string>
-    <string name="normalization_analysis_enabled_summary">Measure the real loudness of each track in the background, so it can be levelled exactly next time it plays. No tags needed.</string>
+    <string name="normalization_analysis_enabled">Measure tracks automatically</string>
+    <string name="normalization_analysis_enabled_summary">Measure the real loudness of tracks in the background, as they play and when new ones are added to the library, so they can be levelled exactly. No tags needed.</string>
     <string name="normalization_analyze_library">Analyze the whole library now</string>
     <string name="normalization_analyze_library_summary">%1$d of %2$d tracks measured</string>
     <string name="normalization_analyze_running">Measuring %1$d of %2$d</string>

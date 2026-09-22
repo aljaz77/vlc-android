@@ -33,7 +33,6 @@ import androidx.preference.Preference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.resources.VLCInstance
@@ -71,9 +70,6 @@ class PreferencesNormalization : BasePreferenceFragment(),
     /** The configuration libVLC is currently built with. */
     private var appliedConfig: NormalizationConfig? = null
 
-    /** The running full library scan, so tapping again can stop it. */
-    private var analysisJob: Job? = null
-
     override fun getXml() = R.xml.preferences_normalization
 
     override fun getTitleId() = R.string.normalization_title
@@ -108,14 +104,10 @@ class PreferencesNormalization : BasePreferenceFragment(),
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         when (preference.key) {
             KEY_ANALYZE_LIBRARY -> {
-                // A second tap while a scan is running stops it rather than
+                // A second tap while a sweep is running stops it rather than
                 // starting a second one.
-                analysisJob?.let {
-                    it.cancel()
-                    analysisJob = null
-                    return true
-                }
-                startLibraryAnalysis()
+                if (LoudnessRepository.isSweeping) LoudnessRepository.cancelFullSweep()
+                else LoudnessRepository.startFullSweep(requireContext())
                 return true
             }
             KEY_CLEAR_ANALYSIS -> {
@@ -128,30 +120,6 @@ class PreferencesNormalization : BasePreferenceFragment(),
             }
         }
         return super.onPreferenceTreeClick(preference)
-    }
-
-    /**
-     * Measure every audio track in the library that has not been measured yet.
-     *
-     * Tied to the fragment's lifecycle: leaving the screen stops the scan, which
-     * is the honest behaviour given there is no foreground service behind it.
-     * Tracks already measured are kept, so restarting picks up where it left off.
-     */
-    private fun startLibraryAnalysis() {
-        val context = requireContext().applicationContext
-        analysisJob = lifecycleScope.launch {
-            val tracks = withContext(Dispatchers.IO) {
-                Medialibrary.getInstance().audio
-                    ?.mapNotNull { mw -> mw.uri?.let { it to mw.title } }
-                    ?: emptyList()
-            }
-            LoudnessRepository.analyzeAll(context, tracks)
-            analysisJob = null
-            if (isAdded) {
-                UiTools.snacker(requireActivity(), getString(R.string.normalization_analyze_done))
-                updateAnalysisSummary(null)
-            }
-        }
     }
 
     /**

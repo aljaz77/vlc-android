@@ -28,8 +28,10 @@ import android.media.MediaFormat
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import org.videolan.vlc.mediadb.models.TrackLoudness
 import java.nio.ByteOrder
 
@@ -51,12 +53,16 @@ object LoudnessAnalyzer {
     /**
      * Measure one track.
      *
-     * Cancellable: this is a long running, CPU heavy call and should be made
-     * from a coroutine on [kotlinx.coroutines.Dispatchers.Default] or IO.
+     * Runs on [Dispatchers.Default] regardless of the caller, because this
+     * decodes and filters an entire track and must never touch the main thread.
+     * Cancellable through the calling coroutine.
      *
      * @return the measurement, or null if the track could not be decoded
      */
-    suspend fun analyze(context: Context, uri: Uri): TrackLoudness? {
+    suspend fun analyze(context: Context, uri: Uri): TrackLoudness? =
+        withContext(Dispatchers.Default) { analyzeBlocking(context, uri) }
+
+    private suspend fun analyzeBlocking(context: Context, uri: Uri): TrackLoudness? {
         var extractor: MediaExtractor? = null
         var codec: MediaCodec? = null
         try {
@@ -136,7 +142,9 @@ object LoudnessAnalyzer {
             currentCoroutineContext().ensureActive()
 
             if (!inputDone) {
-                val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
+                // Never wait for an input buffer: if none is free the decoder is
+                // busy and the output dequeue below is where we should block.
+                val inputIndex = codec.dequeueInputBuffer(0)
                 if (inputIndex >= 0) {
                     val buffer = codec.getInputBuffer(inputIndex)
                     val size = if (buffer != null) extractor.readSampleData(buffer, 0) else -1
@@ -232,5 +240,9 @@ object LoudnessAnalyzer {
     /** Half a second of stereo audio at 48 kHz, grown on demand. */
     private const val DEFAULT_SAMPLE_BUFFER = 48000
 
-    private const val TIMEOUT_US = 10_000L
+    /**
+     * How long to wait for a decoded buffer. Short enough that the loop keeps
+     * the decoder fed, long enough not to spin when it has nothing ready.
+     */
+    private const val TIMEOUT_US = 5_000L
 }
