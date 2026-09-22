@@ -66,7 +66,14 @@
             app:singleLineTitle="false" />
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="@string/replaygain_prefs_category">
+    <PreferenceScreen
+        android:key="normalization_category"
+        android:summary="@string/normalization_summary"
+        android:title="@string/normalization_title"/>
+
+    <PreferenceCategory
+        android:key="replaygain_prefs_category"
+        android:title="@string/replaygain_prefs_category">
         <CheckBoxPreference
             app:singleLineTitle="false"
             android:defaultValue="false"

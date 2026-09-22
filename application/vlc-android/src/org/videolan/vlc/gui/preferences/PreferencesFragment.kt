@@ -121,6 +121,9 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
                 R.xml.preferences_android_auto -> loadFragment(PreferencesAndroidAuto().apply {
                     arguments = bundleOf(EXTRA_PREF_END_POINT to endPoint)
                 })
+                R.xml.preferences_normalization -> loadFragment(PreferencesNormalization().apply {
+                    arguments = bundleOf(EXTRA_PREF_END_POINT to endPoint)
+                })
             }
             arguments = null
         }

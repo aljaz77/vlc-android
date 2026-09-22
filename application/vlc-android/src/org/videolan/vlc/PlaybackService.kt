@@ -130,6 +130,8 @@ import org.videolan.resources.QUICK_SEARCH_BOX_APP_PKG
 import org.videolan.resources.NotificationIds
 import org.videolan.resources.VLCInstance
 import org.videolan.resources.VLCOptions
+import org.videolan.resources.normalization.NormalizationConfig
+import org.videolan.vlc.audio.DeviceNormalizer
 import org.videolan.resources.WEARABLE_RESERVE_SLOT_SKIP_TO_NEXT
 import org.videolan.resources.WEARABLE_RESERVE_SLOT_SKIP_TO_PREV
 import org.videolan.resources.WEARABLE_SHOW_CUSTOM_ACTION
@@ -231,6 +233,12 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     var headsetInserted = false
     private lateinit var wakeLock: PowerManager.WakeLock
     private val audioFocusHelper by lazy { VLCAudioFocusHelper(this) }
+    /**
+     * Volume normalization applied through Android's audio effect framework.
+     * Lives here because it follows the audio session, which follows the service.
+     */
+    val deviceNormalizer = DeviceNormalizer()
+
     private lateinit var browserCallback: MediaBrowserCallback
     var sleepTimerJob: Job? = null
     var waitForMediaEnd = false
@@ -327,6 +335,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
         when (event.type) {
             MediaPlayer.Event.Playing -> {
                 if (BuildConfig.DEBUG) Log.i(TAG, "MediaPlayer.Event.Playing")
+                applyNormalization()
                 executeUpdate(true)
                 lastTime = getTime()
                 audioFocusHelper.changeAudioFocus(true)
@@ -921,6 +930,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
         //Call it once mediaSession is null, to not publish playback state
         stop(systemExit = true)
 
+        deviceNormalizer.release()
         unregisterReceiver(receiver)
         playlistManager.onServiceDestroyed()
     }
@@ -955,6 +965,20 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
             isForeground = true
         }
         if (stopped) lifecycleScope.launch { hideNotification(true) }
+    }
+
+    /**
+     * Re-read the normalization preferences and push them into the device effect.
+     *
+     * Safe to call at any time: it attaches, retunes or detaches the effect as
+     * needed, and does nothing when the audio session does not exist yet.
+     *
+     * Only covers the device effect half of normalization. The libVLC filter half
+     * is read when the libVLC instance is created, so changing those settings
+     * needs VLCInstance.restart() instead.
+     */
+    fun applyNormalization() {
+        deviceNormalizer.setConfig(NormalizationConfig.from(settings))
     }
 
     private fun sendStartSessionIdIntent() {

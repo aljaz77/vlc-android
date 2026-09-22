@@ -537,6 +537,38 @@
         <item>Windows-1258</item>
     </string-array>
 
+    <string-array name="normalization_targets">
+        <item>@string/normalization_target_quiet</item>
+        <item>@string/normalization_target_standard</item>
+        <item>@string/normalization_target_streaming</item>
+        <item>@string/normalization_target_car</item>
+        <item>@string/normalization_target_custom</item>
+    </string-array>
+    <string-array name="normalization_targets_values" translatable="false">
+        <item>quiet</item>
+        <item>standard</item>
+        <item>streaming</item>
+        <item>car</item>
+        <item>custom</item>
+    </string-array>
+
+    <string-array name="normalization_methods">
+        <item>@string/normalization_method_auto</item>
+        <item>@string/normalization_method_replaygain</item>
+        <item>@string/normalization_method_measured</item>
+        <item>@string/normalization_method_compressor</item>
+        <item>@string/normalization_method_leveler</item>
+        <item>@string/normalization_method_device</item>
+    </string-array>
+    <string-array name="normalization_methods_values" translatable="false">
+        <item>auto</item>
+        <item>replaygain</item>
+        <item>measured</item>
+        <item>compressor</item>
+        <item>leveler</item>
+        <item>device</item>
+    </string-array>
+
     <string-array name="replaygain">
         <item>@string/replaygain_track</item>
         <item>@string/replaygain_album</item>

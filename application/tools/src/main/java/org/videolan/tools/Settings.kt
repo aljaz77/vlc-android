@@ -409,6 +409,18 @@ const val KEY_AUDIO_REPLAY_GAIN_DEFAULT = "audio-replay-gain-default"
 const val KEY_AUDIO_REPLAY_GAIN_PREAMP = "audio-replay-gain-preamp"
 const val KEY_PREFERRED_RESOLUTION = "preferred_resolution"
 
+//Volume normalization
+const val KEY_NORMALIZATION_ENABLED = "normalization_enabled"
+const val KEY_NORMALIZATION_METHOD = "normalization_method"
+const val KEY_NORMALIZATION_TARGET = "normalization_target"
+const val KEY_NORMALIZATION_CUSTOM_TARGET = "normalization_custom_target"
+const val KEY_NORMALIZATION_STRENGTH = "normalization_strength"
+const val KEY_NORMALIZATION_PEAK_LIMITER = "normalization_peak_limiter"
+const val KEY_NORMALIZATION_MAX_BOOST = "normalization_max_boost"
+const val KEY_NORMALIZATION_APPLY_TO_VIDEO = "normalization_apply_to_video"
+const val KEY_NORMALIZATION_ALBUM_MODE = "normalization_album_mode"
+const val KEY_NORMALIZATION_ANALYSIS_ENABLED = "normalization_analysis_enabled"
+
 //Auto
 const val KEY_ANDROID_AUTO_QUEUE_FORMAT_VAL = "android_auto_queue_format_val"
 const val KEY_ANDROID_AUTO_QUEUE_INFO_POS_VAL = "android_auto_queue_info_pos_val"

@@ -39,6 +39,7 @@ import org.videolan.tools.KEY_AUDIO_REPLAY_GAIN_ENABLE
 import org.videolan.tools.KEY_AUDIO_REPLAY_GAIN_MODE
 import org.videolan.tools.KEY_AUDIO_REPLAY_GAIN_PEAK_PROTECTION
 import org.videolan.tools.KEY_AUDIO_REPLAY_GAIN_PREAMP
+import org.videolan.resources.normalization.NormalizationConfig
 import org.videolan.tools.KEY_CASTING_AUDIO_ONLY
 import org.videolan.tools.KEY_CASTING_PASSTHROUGH
 import org.videolan.tools.KEY_CASTING_QUALITY
@@ -226,7 +227,13 @@ object VLCOptions {
                 options.add("--hrtf-file")
                 options.add(hstfPath)
             }
-            if (pref.getBoolean(KEY_AUDIO_REPLAY_GAIN_ENABLE, false)) {
+            // Volume normalization derives its own replay gain and audio filter
+            // options from a loudness target, so it supersedes the manual replay
+            // gain settings below. Only one of the two is ever applied.
+            val normalization = NormalizationConfig.from(pref)
+            if (normalization.enabled) {
+                options.addAll(normalization.libVlcOptions())
+            } else if (pref.getBoolean(KEY_AUDIO_REPLAY_GAIN_ENABLE, false)) {
                 options.add("--audio-replay-gain-mode=${pref.getString(KEY_AUDIO_REPLAY_GAIN_MODE, "track")}")
                 options.add("--audio-replay-gain-preamp=${pref.getString(KEY_AUDIO_REPLAY_GAIN_PREAMP, "0.0")}")
                 options.add("--audio-replay-gain-default=${pref.getString(KEY_AUDIO_REPLAY_GAIN_DEFAULT, "-7.0")}")

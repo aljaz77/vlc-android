@@ -40,6 +40,7 @@ import org.videolan.resources.VLCInstance
 import org.videolan.tools.KEY_AUDIO_DIGITAL_OUTPUT
 import org.videolan.tools.KEY_AUDIO_PREFERRED_LANGUAGE
 import org.videolan.tools.KEY_AUDIO_REPLAY_GAIN_DEFAULT
+import org.videolan.tools.KEY_NORMALIZATION_ENABLED
 import org.videolan.tools.KEY_AUDIO_REPLAY_GAIN_ENABLE
 import org.videolan.tools.KEY_AUDIO_REPLAY_GAIN_MODE
 import org.videolan.tools.KEY_AUDIO_REPLAY_GAIN_PEAK_PROTECTION
@@ -87,6 +88,21 @@ class PreferencesAudio : BasePreferenceFragment(), SharedPreferences.OnSharedPre
         preferredAudioTrack = findPreference(KEY_AUDIO_PREFERRED_LANGUAGE)!!
         updatePreferredAudioTrack()
         prepareLocaleList()
+        updateReplayGainAvailability()
+    }
+
+    /**
+     * Volume normalization derives its own replay gain options from a loudness
+     * target, so while it is on the manual controls below would be ignored.
+     * Grey them out rather than leaving two contradictory sets of settings.
+     */
+    private fun updateReplayGainAvailability() {
+        val normalizationOn = preferenceManager.sharedPreferences
+            ?.getBoolean(KEY_NORMALIZATION_ENABLED, false) == true
+        findPreference<Preference>("replaygain_prefs_category")?.let {
+            it.isEnabled = !normalizationOn
+            it.summary = if (normalizationOn) getString(R.string.replaygain_superseded) else null
+        }
     }
 
     private fun updatePreferredAudioTrack() {
@@ -119,6 +135,10 @@ class PreferencesAudio : BasePreferenceFragment(), SharedPreferences.OnSharedPre
                 (requireActivity() as PreferencesActivity).detectHeadset((preference as TwoStatePreference).isChecked)
                 return true
             }
+            "normalization_category" -> {
+                loadFragment(PreferencesNormalization())
+                return true
+            }
             "soundfont" -> {
                 val filePickerIntent = Intent(requireContext(), FilePickerActivity::class.java)
                 filePickerIntent.putExtra(KEY_PICKER_TYPE, PickerType.SOUNDFONT.ordinal)
@@ -146,6 +166,7 @@ class PreferencesAudio : BasePreferenceFragment(), SharedPreferences.OnSharedPre
         if (sharedPreferences == null || key == null || activity == null) return
 
         when (key) {
+            KEY_NORMALIZATION_ENABLED -> updateReplayGainAvailability()
             KEY_AUDIO_DIGITAL_OUTPUT -> updatePassThroughSummary()
             KEY_AUDIO_PREFERRED_LANGUAGE -> updatePreferredAudioTrack()
             KEY_AUDIO_REPLAY_GAIN_ENABLE, KEY_AUDIO_REPLAY_GAIN_MODE, KEY_AUDIO_REPLAY_GAIN_PEAK_PROTECTION -> lifecycleScope.launch { restartLibVLC() }

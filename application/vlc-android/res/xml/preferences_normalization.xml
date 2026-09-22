@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+                                      xmlns:app="http://schemas.android.com/apk/res-auto"
+                                      android:key="normalization_category"
+                                      android:title="@string/normalization_title">
+
+    <CheckBoxPreference
+        android:defaultValue="false"
+        android:key="normalization_enabled"
+        android:summary="@string/normalization_enable_summary"
+        android:title="@string/normalization_enable"
+        app:iconSpaceReserved="false"
+        app:singleLineTitle="false"/>
+
+    <PreferenceCategory
+        android:title="@string/normalization_target_category"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="streaming"
+            android:dependency="normalization_enabled"
+            android:entries="@array/normalization_targets"
+            android:entryValues="@array/normalization_targets_values"
+            android:key="normalization_target"
+            android:summary="@string/normalization_target_summary"
+            android:title="@string/normalization_target"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+        <EditTextPreference
+            android:defaultValue="-14.0"
+            android:dependency="normalization_enabled"
+            android:key="normalization_custom_target"
+            android:summary="@string/normalization_custom_target_summary"
+            android:title="@string/normalization_custom_target"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/normalization_method_category"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:defaultValue="auto"
+            android:dependency="normalization_enabled"
+            android:entries="@array/normalization_methods"
+            android:entryValues="@array/normalization_methods_values"
+            android:key="normalization_method"
+            android:title="@string/normalization_method"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+        <SeekBarPreference
+            android:defaultValue="50"
+            android:dependency="normalization_enabled"
+            android:key="normalization_strength"
+            android:max="100"
+            android:summary="@string/normalization_strength_summary"
+            android:title="@string/normalization_strength"
+            app:iconSpaceReserved="false"
+            app:min="0"
+            app:showSeekBarValue="true"
+            app:singleLineTitle="false"
+            app:updatesContinuously="false"/>
+
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:dependency="normalization_enabled"
+            android:key="normalization_peak_limiter"
+            android:summary="@string/normalization_peak_limiter_summary"
+            android:title="@string/normalization_peak_limiter"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+        <EditTextPreference
+            android:defaultValue="12.0"
+            android:dependency="normalization_enabled"
+            android:key="normalization_max_boost"
+            android:summary="@string/normalization_max_boost_summary"
+            android:title="@string/normalization_max_boost"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:dependency="normalization_enabled"
+            android:key="normalization_album_mode"
+            android:summary="@string/normalization_album_mode_summary"
+            android:title="@string/normalization_album_mode"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:dependency="normalization_enabled"
+            android:key="normalization_apply_to_video"
+            android:summary="@string/normalization_apply_to_video_summary"
+            android:title="@string/normalization_apply_to_video"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
+    </PreferenceCategory>
+
+</androidx.preference.PreferenceScreen>
