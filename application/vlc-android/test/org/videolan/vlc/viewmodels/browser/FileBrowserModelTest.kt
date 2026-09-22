@@ -18,6 +18,7 @@ import org.videolan.libvlc.util.MediaBrowser
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.stubs.StubMediaWrapper
 import org.videolan.tools.CoroutineContextProvider
+import org.videolan.tools.Settings
 import org.videolan.vlc.BaseTest
 import org.videolan.vlc.database.BrowserFavDao
 import org.videolan.vlc.providers.BrowserProvider
@@ -64,7 +65,8 @@ class FileBrowserModelTest : BaseTest() {
     }
 
     private fun initBrowserModel(url: String?, showHiddenFiles: Boolean, showDummyCategory: Boolean = false) {
-        browserModel = BrowserModel(application, url, TYPE_FILE, showHiddenFiles, showDummyCategory, TestCoroutineContextProvider())
+        Settings.showHiddenFiles = showHiddenFiles
+        browserModel = BrowserModel(application, url, TYPE_FILE, showDummyCategory, coroutineContextProvider = TestCoroutineContextProvider())
         browserProvider = browserModel.provider
         mediaBrowser = BrowserProvider.get(browserProvider)
     }

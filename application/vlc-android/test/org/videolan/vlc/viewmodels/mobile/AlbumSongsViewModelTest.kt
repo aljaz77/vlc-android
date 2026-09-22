@@ -23,9 +23,9 @@ class AlbumSongsViewModelTest : BaseTest() {
 
     private fun setupViewModel(name: String, isArtist: Boolean) {
         if (isArtist)
-            parent = MLServiceLocator.getAbstractArtist(dataSource.uuid, name, "", "", "")
+            parent = MLServiceLocator.getAbstractArtist(dataSource.uuid, name, "", "", "", 0, 0, 0, false)
         else
-            parent = MLServiceLocator.getAbstractGenre(dataSource.uuid, name)
+            parent = MLServiceLocator.getAbstractGenre(dataSource.uuid, name, false)
         albumSongsViewModel = AlbumSongsViewModel(context, parent)
     }
 

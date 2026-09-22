@@ -17,6 +17,7 @@ import org.videolan.libvlc.stubs.StubMedia
 import org.videolan.libvlc.util.MediaBrowser
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.medialibrary.stubs.StubMediaWrapper
+import org.videolan.tools.Settings
 import org.videolan.vlc.BaseTest
 import org.videolan.vlc.R
 import org.videolan.vlc.database.CustomDirectoryDao
@@ -75,7 +76,8 @@ class StorageModelTest : BaseTest() {
      */
     private fun initBrowserModel(showHiddenFiles: Boolean, url: String?) {
         this.showHiddenFiles = showHiddenFiles
-        browserModel = BrowserModel(application, url, TYPE_STORAGE, showHiddenFiles, false, TestCoroutineContextProvider())
+        Settings.showHiddenFiles = showHiddenFiles
+        browserModel = BrowserModel(application, url, TYPE_STORAGE, false, coroutineContextProvider = TestCoroutineContextProvider())
         browserProvider = browserModel.provider
     }
 

@@ -4,6 +4,7 @@ import com.jraska.livedata.test
 import org.junit.Assert.*
 import org.junit.Test
 import org.videolan.medialibrary.MLServiceLocator
+import org.videolan.medialibrary.interfaces.media.Playlist
 import org.videolan.medialibrary.stubs.StubDataSource
 import org.videolan.vlc.BaseTest
 import org.videolan.resources.MEDIALIBRARY_PAGE_SIZE
@@ -15,11 +16,11 @@ class PlaylistsViewModelTest : BaseTest() {
     override fun beforeTest() {
         super.beforeTest()
         StubDataSource.getInstance().resetData()
-        playlistsViewModel = PlaylistsViewModel(context)
+        playlistsViewModel = PlaylistsViewModel(context, Playlist.Type.All)
     }
 
     private fun createDummyPlaylists(count: Int) {
-        (0 until count).map { mediaLibrary.createPlaylist("test$it") }
+        (0 until count).map { mediaLibrary.createPlaylist("test$it", true, false) }
     }
 
     @Test

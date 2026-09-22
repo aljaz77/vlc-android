@@ -21,12 +21,16 @@
 package org.videolan.vlc.repository
 
 import android.net.Uri
+import org.junit.Ignore
 import org.junit.runner.RunWith
 import org.powermock.core.classloader.annotations.PrepareForTest
 import org.powermock.modules.junit4.PowerMockRunner
 import org.videolan.vlc.ExternalMonitor
 
 
+// Every test in this class is commented out upstream. Marked ignored so the
+// runner reports it as skipped rather than failing with "No runnable methods".
+@Ignore("Test bodies are commented out; see the body of this class")
 @RunWith(PowerMockRunner::class)
 @PrepareForTest(Uri::class, ExternalMonitor::class)
 class BrowserFavRepositoryTest {

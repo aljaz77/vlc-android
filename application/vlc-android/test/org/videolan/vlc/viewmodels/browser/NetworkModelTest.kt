@@ -52,7 +52,8 @@ class NetworkModelTest : BaseTest() {
     }
 
     private fun initNetworkModel(url: String?, showHiddenFiles: Boolean = false) {
-        browserModel = NetworkModel(application, url, showHiddenFiles, TestCoroutineContextProvider())
+        Settings.showHiddenFiles = showHiddenFiles
+        browserModel = NetworkModel(application, url, coroutineContextProvider = TestCoroutineContextProvider())
         browserProvider = browserModel.provider
     }
 

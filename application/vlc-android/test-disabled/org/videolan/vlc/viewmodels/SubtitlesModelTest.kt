@@ -2,7 +2,7 @@ package org.videolan.vlc.viewmodels
 
 import androidx.core.net.toUri
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.Transformations
+import androidx.lifecycle.map
 import com.jraska.livedata.test
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
@@ -10,7 +10,7 @@ import junit.framework.TestCase.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import main.java.org.videolan.resources.opensubtitles.OpenSubtitleRepository
+import org.videolan.resources.opensubtitles.OpenSubtitleRepository
 import org.videolan.resources.util.NoConnectivityException
 import org.videolan.tools.FileUtils
 import org.videolan.vlc.BaseTest
@@ -42,7 +42,7 @@ class SubtitlesModelTest : BaseTest() {
         ExternalSubRepository.applyMock(subRepo)
         val capturedMedia = slot<String>()
         // To mock the behavior of actual get function in DAO (filter by media path)
-        every { mockedDao.get(capture(capturedMedia)) } answers { Transformations.map(downloadedLiveData) { it.filter { it.mediaPath == capturedMedia.captured } } }
+        every { mockedDao.get(capture(capturedMedia)) } answers { downloadedLiveData.map { it.filter { sub -> sub.mediaPath == capturedMedia.captured } } }
 
         // To use the mocked instance of OpenSubRepository
         OpenSubtitleRepository.instance = lazyOf(mockedOpenSubRepo)

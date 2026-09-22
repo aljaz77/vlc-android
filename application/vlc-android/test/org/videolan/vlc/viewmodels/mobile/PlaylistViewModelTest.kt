@@ -27,7 +27,7 @@ class PlaylistViewModelTest : BaseTest() {
     }
 
     private fun setupViewModel(playlist: String, mediaIds: List<Long>? = null) {
-        parent = medialibrary.createPlaylist(playlist).apply { if (mediaIds != null) append(mediaIds) }
+        parent = medialibrary.createPlaylist(playlist, true, false).apply { if (mediaIds != null) append(mediaIds) }
         playlistViewModel = PlaylistViewModel(context, parent)
     }
 

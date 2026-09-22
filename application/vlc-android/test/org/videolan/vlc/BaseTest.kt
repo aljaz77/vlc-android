@@ -18,7 +18,9 @@ import org.videolan.medialibrary.interfaces.Medialibrary
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = VLCTestApplication::class, manifest = Config.NONE)
-open class BaseTest {
+// Abstract so the test runner does not try to run the base class itself: it
+// carries no @Test methods, and JUnit reports that as a failure.
+abstract class BaseTest {
     val context: Context = ApplicationProvider.getApplicationContext()
     val application = (RuntimeEnvironment.application as VLCTestApplication)
     val medialibrary: Medialibrary

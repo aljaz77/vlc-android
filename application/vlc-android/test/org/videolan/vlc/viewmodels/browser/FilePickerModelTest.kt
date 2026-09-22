@@ -13,6 +13,7 @@ import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.stubs.StubMedia
 import org.videolan.libvlc.util.MediaBrowser
 import org.videolan.medialibrary.stubs.StubMediaWrapper
+import org.videolan.tools.Settings
 import org.videolan.vlc.BaseTest
 import org.videolan.vlc.providers.BrowserProvider
 import org.videolan.tools.CoroutineContextProvider
@@ -49,7 +50,8 @@ class FilePickerModelTest : BaseTest() {
         super.beforeTest()
         dummyUrl = temporaryFolder.root.absolutePath
 
-        browserModel = BrowserModel(application, dummyUrl, TYPE_PICKER, false, true, org.videolan.vlc.util.TestCoroutineContextProvider())
+        Settings.showHiddenFiles = false
+        browserModel = BrowserModel(application, dummyUrl, TYPE_PICKER, true, coroutineContextProvider = org.videolan.vlc.util.TestCoroutineContextProvider())
         browserProvider = browserModel.provider
 
         setupTestFiles()
