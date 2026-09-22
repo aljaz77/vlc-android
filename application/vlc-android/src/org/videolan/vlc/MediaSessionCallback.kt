@@ -65,6 +65,7 @@ import org.videolan.vlc.media.MediaSessionBrowser
 import org.videolan.vlc.media.PlaylistManager
 import org.videolan.vlc.util.Permissions.canCheckBluetoothDevices
 import org.videolan.vlc.util.TextUtils
+import org.videolan.vlc.util.VoiceSearchMatcher
 import org.videolan.vlc.util.VoiceSearchParams
 import org.videolan.vlc.util.awaitMedialibraryStarted
 import org.videolan.vlc.util.mergeSorted
@@ -320,7 +321,12 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
                     MediaSessionBrowser.ID_SEARCH -> {
                         val query = mediaIdUri.getQueryParameter("query") ?: ""
                         val tracks = context.getFromMl {
-                            search(query, false, false)?.tracks?.toList() ?: emptyList()
+                            // Ordered exactly as MediaSessionBrowser.search ordered
+                            // them, so the position in the media id still points at
+                            // the track that was tapped.
+                            MediaSessionBrowser.orderSearchedTracks(
+                                search(query, false, false)?.tracks, query
+                            )?.toList() ?: emptyList()
                         }
                         if (tracks.isNotEmpty() && isActive) {
                             loadMedia(tracks, position)
@@ -398,10 +404,13 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
             val vsp = VoiceSearchParams(query ?: "", extras)
             var tracks = when {
                 vsp.isAny -> playbackService.medialibrary.audio
-                vsp.isSongFocus -> playbackService.medialibrary.searchMedia(vsp.song)
+                vsp.isSongFocus -> searchForSong(vsp.song, vsp.artist)
                 else -> null
             }
-            tracks?.sortWith(MediaComparators.ANDROID_AUTO)
+            // Only an unfocused request wants the library in browsing order. A
+            // named song has already been ranked by how well it matches the
+            // query and must not be reordered.
+            if (vsp.isAny) tracks?.sortWith(MediaComparators.ANDROID_AUTO)
             val items = when {
                 vsp.isAlbumFocus -> playbackService.medialibrary.searchAlbum(vsp.album)
                 vsp.isGenreFocus -> playbackService.medialibrary.searchGenre(vsp.genre)
@@ -410,9 +419,21 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
                 else -> null
             }
             if (!isActive) return@launch
+            var matchedSpecificTrack = vsp.isSongFocus && !tracks.isNullOrEmpty()
             if (tracks.isNullOrEmpty() && items.isNullOrEmpty() && query?.isNotEmpty() == true) {
                 playbackService.medialibrary.search(query, Settings.includeMissing, false)?.run {
+                    // A spoken query naming one song is the common case, so
+                    // matching tracks are considered before anything else. They
+                    // used to be ignored entirely here, which meant that asking
+                    // for a song played its album, or its artist, or nothing.
+                    val ranked = VoiceSearchMatcher.rankQuery(
+                        this.tracks?.toList() ?: emptyList(), query
+                    )
                     tracks = when {
+                        ranked.isNotEmpty() -> {
+                            matchedSpecificTrack = true
+                            ranked.toTypedArray()
+                        }
                         !albums.isNullOrEmpty() -> albums!!.flatMap { it.tracks.toList() }.toTypedArray()
                         !artists.isNullOrEmpty() -> artists!!.flatMap { it.tracks.toList() }.toTypedArray()
                         !playlists.isNullOrEmpty() -> playlists!!.flatMap { it.tracks.toList() }.toTypedArray()
@@ -423,18 +444,41 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
             }
             if (!isActive) return@launch
             if (tracks.isNullOrEmpty() && !items.isNullOrEmpty()) tracks = items.flatMap { it.tracks.toList() }.toTypedArray()
+            val playSpecificTrack = matchedSpecificTrack
             playbackService.lifecycleScope.launch(Dispatchers.Main) {
                 when {
                     !tracks.isNullOrEmpty() -> {
                         loadMedia(tracks?.toList(), if (vsp.isAny) SecureRandom().nextInt(min(tracks!!.size, MEDIALIBRARY_PAGE_SIZE)) else 0)
-                        // Enable shuffle when isAny is true and disable when false
-                        if (vsp.isAny == !playbackService.isShuffling) playbackService.shuffle()
+                        when {
+                            // Shuffling a request for one particular song would
+                            // start playback somewhere else entirely.
+                            playSpecificTrack -> if (playbackService.isShuffling) playbackService.shuffle()
+                            // Enable shuffle when isAny is true and disable when false
+                            vsp.isAny == !playbackService.isShuffling -> playbackService.shuffle()
+                        }
                     }
                     playbackService.hasMedia() -> playbackService.play()
                     else -> playbackService.displayPlaybackError(R.string.search_no_result)
                 }
             }
         }
+    }
+
+    /**
+     * Find the tracks that best answer a request for a named song.
+     *
+     * The medialibrary search is a plain substring match, so it happily returns
+     * every version of a common title. Ranking the candidates puts the one that
+     * was actually asked for first, using the artist when the assistant supplied
+     * one.
+     */
+    private fun searchForSong(song: String?, artist: String?): Array<MediaWrapper>? {
+        if (song.isNullOrBlank()) return null
+        val candidates = playbackService.medialibrary.searchMedia(song)?.toList() ?: return null
+        val ranked = VoiceSearchMatcher.rank(candidates, song, artist)
+        // Ranking can reject everything when the transcription is far off, in
+        // which case the raw candidates are still better than nothing.
+        return if (ranked.isNotEmpty()) ranked.toTypedArray() else candidates.toTypedArray()
     }
 
     override fun onSetShuffleMode(shuffleMode: Int) {

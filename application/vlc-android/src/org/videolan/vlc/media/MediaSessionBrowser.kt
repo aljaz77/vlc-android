@@ -65,6 +65,7 @@ import org.videolan.vlc.isPathValid
 import org.videolan.vlc.media.MediaUtils.getMediaAlbum
 import org.videolan.vlc.media.MediaUtils.getMediaArtist
 import org.videolan.vlc.media.MediaUtils.getMediaSubtitle
+import org.videolan.vlc.util.VoiceSearchMatcher
 import org.videolan.vlc.util.TextUtils
 import org.videolan.vlc.util.ThumbnailsProvider
 import org.videolan.vlc.util.isSchemeStreaming
@@ -398,11 +399,21 @@ class MediaSessionBrowser {
             val isAndroidAuto = rootHints?.containsKey(EXTRA_BROWSER_ICON_SIZE) == true
             val searchAggregate = Medialibrary.getInstance().search(query, false, false)
             val searchMediaId = ID_SEARCH.toUri().buildUpon().appendQueryParameter("query", query).toString()
+            // Tracks are ordered by how well they answer the query, and promoted
+            // above the other categories when one of them is a strong match, so
+            // that searching for a song title actually surfaces that song first.
+            // The same ordering is applied when the result is played, in
+            // MediaSessionCallback's ID_SEARCH branch, so the position carried in
+            // the media id refers to the same track the person tapped.
+            val orderedTracks = orderSearchedTracks(searchAggregate.tracks, query)
+            val trackItems = buildMediaItems(context, searchMediaId, orderedTracks, androidAuto = isAndroidAuto, forSearch = true)
+            val tracksFirst = VoiceSearchMatcher.hasStrongTitleMatch(orderedTracks?.toList() ?: emptyList(), query)
+            if (tracksFirst) results.addAll(trackItems)
             results.addAll(buildMediaItems(context, ID_PLAYLIST, searchAggregate.playlists, forSearch = true))
             results.addAll(buildMediaItems(context, ID_GENRE, searchAggregate.genres, forSearch = true))
             results.addAll(buildMediaItems(context, ID_ARTIST, searchAggregate.artists, forSearch = true))
             results.addAll(buildMediaItems(context, ID_ALBUM, searchAggregate.albums, forSearch = true))
-            results.addAll(buildMediaItems(context, searchMediaId, searchAggregate.tracks, androidAuto = isAndroidAuto, forSearch = true))
+            if (!tracksFirst) results.addAll(trackItems)
             if (results.isEmpty()) {
                 val emptyMediaDesc = MediaDescriptionCompat.Builder()
                         .setMediaId(ID_NO_MEDIA)
@@ -412,6 +423,17 @@ class MediaSessionBrowser {
                 results.add(MediaBrowserCompat.MediaItem(emptyMediaDesc, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE))
             }
             return results
+        }
+
+        /**
+         * Search result tracks, ordered so the best answer to the query is first.
+         *
+         * Shared with playback so that both sides agree on what "result number
+         * three" means.
+         */
+        fun orderSearchedTracks(tracks: Array<MediaWrapper>?, query: String): Array<MediaWrapper>? {
+            if (tracks.isNullOrEmpty()) return tracks
+            return VoiceSearchMatcher.orderForBrowsing(tracks.toList(), query).toTypedArray()
         }
 
         /**
