@@ -508,6 +508,10 @@
 
     <!-- Volume normalization -->
     <string name="normalization_title">Volume normalization</string>
+    <string name="normalization_enabled_toast">Volume normalization on</string>
+    <string name="normalization_disabled_toast">Volume normalization off</string>
+    <string name="enable_android_auto_normalization_button">Normalization button</string>
+    <string name="enable_android_auto_normalization_button_summary">Show a volume normalization switch in the car player</string>
     <string name="normalization_summary">Even out the volume difference between tracks</string>
     <string name="normalization_enable">Enable volume normalization</string>
     <string name="normalization_enable_summary">Play every track at a similar loudness instead of whatever level it was mastered at</string>

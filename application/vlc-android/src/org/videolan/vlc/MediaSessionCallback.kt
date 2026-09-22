@@ -49,6 +49,7 @@ import org.videolan.resources.CUSTOM_ACTION_FAST_FORWARD
 import org.videolan.resources.CUSTOM_ACTION_REPEAT
 import org.videolan.resources.CUSTOM_ACTION_REWIND
 import org.videolan.resources.CUSTOM_ACTION_SHUFFLE
+import org.videolan.resources.CUSTOM_ACTION_NORMALIZATION
 import org.videolan.resources.CUSTOM_ACTION_SPEED
 import org.videolan.resources.EXTRA_RELATIVE_MEDIA_ID
 import org.videolan.resources.MEDIALIBRARY_PAGE_SIZE
@@ -262,6 +263,7 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
             CUSTOM_ACTION_REWIND -> onRewind()
             CUSTOM_ACTION_FAST_FORWARD -> onFastForward()
             CUSTOM_ACTION_SHUFFLE -> if (playbackService.canShuffle()) playbackService.shuffle()
+            CUSTOM_ACTION_NORMALIZATION -> playbackService.toggleNormalization()
             CUSTOM_ACTION_REPEAT -> playbackService.repeatType = when (playbackService.repeatType) {
                 PlaybackStateCompat.REPEAT_MODE_NONE -> PlaybackStateCompat.REPEAT_MODE_ALL
                 PlaybackStateCompat.REPEAT_MODE_ALL -> PlaybackStateCompat.REPEAT_MODE_ONE

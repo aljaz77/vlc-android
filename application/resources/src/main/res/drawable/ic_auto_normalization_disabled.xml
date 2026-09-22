@@ -1,0 +1,34 @@
+<!--
+  ~ *************************************************************************
+  ~  ic_auto_normalization_disabled.xml
+  ~ **************************************************************************
+  ~ Copyright © 2026 VLC authors and VideoLAN
+  ~ This program is free software; you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation; either version 2 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program; if not, write to the Free Software
+  ~ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
+  ~ ***************************************************************************
+  -->
+
+<!--
+  The same bars at wildly different heights, and no guide lines: the
+  uneven queue normalization is there to fix.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M3,10h2.5v8H3zM7.5,4H10v14H7.5zM12,12h2.5v6H12zM16.5,7H19v11h-2.5z"
+      android:fillColor="#000000"/>
+</vector>

@@ -51,6 +51,12 @@
                 android:title="@string/audio_playback_speed_global"
                 app:singleLineTitle="false" />
         <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="enable_android_auto_normalization_button"
+            android:summary="@string/enable_android_auto_normalization_button_summary"
+            android:title="@string/enable_android_auto_normalization_button"
+            app:singleLineTitle="false" />
+        <CheckBoxPreference
             android:defaultValue="false"
             android:key="enable_android_auto_speed_buttons"
             android:summary="@string/enable_android_auto_speed_buttons_summary"

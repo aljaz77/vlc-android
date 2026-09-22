@@ -365,6 +365,7 @@ const val KEY_LAST_SESSION_CRASHED = "last_session_crashed"
 
 const val ENABLE_ANDROID_AUTO_SPEED_BUTTONS = "enable_android_auto_speed_buttons"
 const val ENABLE_ANDROID_AUTO_SEEK_BUTTONS = "enable_android_auto_seek_buttons"
+const val ENABLE_ANDROID_AUTO_NORMALIZATION_BUTTON = "enable_android_auto_normalization_button"
 
 //VLC options
 const val KEY_CUSTOM_LIBVLC_OPTIONS = "custom_libvlc_options"

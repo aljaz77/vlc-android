@@ -117,6 +117,7 @@ import org.videolan.resources.CUSTOM_ACTION_FAST_FORWARD
 import org.videolan.resources.CUSTOM_ACTION_REPEAT
 import org.videolan.resources.CUSTOM_ACTION_REWIND
 import org.videolan.resources.CUSTOM_ACTION_SHUFFLE
+import org.videolan.resources.CUSTOM_ACTION_NORMALIZATION
 import org.videolan.resources.CUSTOM_ACTION_SPEED
 import org.videolan.resources.EXTRA_CUSTOM_ACTION_ID
 import org.videolan.resources.EXTRA_PLAY_ONLY
@@ -131,6 +132,8 @@ import org.videolan.resources.NotificationIds
 import org.videolan.resources.VLCInstance
 import org.videolan.resources.VLCOptions
 import org.videolan.resources.normalization.NormalizationConfig
+import org.videolan.tools.ENABLE_ANDROID_AUTO_NORMALIZATION_BUTTON
+import org.videolan.tools.KEY_NORMALIZATION_ENABLED
 import org.videolan.vlc.audio.DeviceNormalizer
 import org.videolan.vlc.audio.LoudnessRepository
 import org.videolan.resources.WEARABLE_RESERVE_SLOT_SKIP_TO_NEXT
@@ -1426,8 +1429,57 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
             }
             pscb.addCustomAction(CUSTOM_ACTION_REPEAT, getString(R.string.repeat_title), repeatResId)
         }
+        addNormalizationAction(pscb)
         addCustomSeekActions(pscb, podcastMode or settings.getBoolean(ENABLE_ANDROID_AUTO_SEEK_BUTTONS, false))
         addCustomSpeedActions(pscb, podcastMode or settings.getBoolean(ENABLE_ANDROID_AUTO_SPEED_BUTTONS, false))
+    }
+
+    /**
+     * A normalization on/off button in the car's playback view.
+     *
+     * Settings cannot be reached while driving, and a queue that is suddenly too
+     * loud or too flat is exactly the sort of thing you notice on the road.
+     *
+     * Only offered for methods with a device effect behind them, because only
+     * those can be switched while a track plays. Turning a libVLC filter on or
+     * off needs the instance rebuilt, and PlaylistManager.restart stops playback
+     * and reloads the saved playlist, which is not something to do to someone
+     * who is driving. A button that silently did nothing would be worse than no
+     * button, so for the filter-only methods there is none.
+     */
+    private fun addNormalizationAction(pscb: PlaybackStateCompat.Builder) {
+        if (!settings.getBoolean(ENABLE_ANDROID_AUTO_NORMALIZATION_BUTTON, true)) return
+        if (!settings.contains(KEY_NORMALIZATION_ENABLED)) return
+        val config = NormalizationConfig.from(settings)
+        if (!config.method.usesDeviceEffect) return
+        val resId = if (config.enabled) R.drawable.ic_auto_normalization_enabled
+        else R.drawable.ic_auto_normalization_disabled
+        pscb.addCustomAction(
+            CUSTOM_ACTION_NORMALIZATION, getString(R.string.normalization_title), resId
+        )
+    }
+
+    /**
+     * Turn normalization on or off from the car, without interrupting playback.
+     *
+     * The device effect, which carries the per track gain and the limiter, goes
+     * in or out immediately. For the automatic method the gentle compressor
+     * underneath it lives in libVLC and stays loaded until libVLC is next built,
+     * so switching off there removes the levelling but leaves a little
+     * compression behind until the app is restarted. The alternative was
+     * stopping playback to rebuild libVLC, which is worse while driving.
+     */
+    fun toggleNormalization() {
+        val enabled = !NormalizationConfig.from(settings).enabled
+        settings.edit().putBoolean(KEY_NORMALIZATION_ENABLED, enabled).apply()
+        applyNormalization()
+        publishState()
+        displaySubtitleMessage(
+            getString(
+                if (enabled) R.string.normalization_enabled_toast
+                else R.string.normalization_disabled_toast
+            )
+        )
     }
 
     private fun addCustomSeekActions(pscb: PlaybackStateCompat.Builder, showSeekActions: Boolean = true) {
