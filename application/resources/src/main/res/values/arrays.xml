@@ -582,7 +582,6 @@
         <item>@string/normalization_method_measured</item>
         <item>@string/normalization_method_compressor</item>
         <item>@string/normalization_method_leveler</item>
-        <item>@string/normalization_method_device</item>
     </string-array>
     <string-array name="normalization_methods_values" translatable="false">
         <item>auto</item>
@@ -590,7 +589,6 @@
         <item>measured</item>
         <item>compressor</item>
         <item>leveler</item>
-        <item>device</item>
     </string-array>
 
     <string-array name="replaygain">

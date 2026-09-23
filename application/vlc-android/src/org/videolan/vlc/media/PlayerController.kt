@@ -27,6 +27,8 @@ import org.videolan.vlc.gui.dialogs.adapters.VlcTrack
 import org.videolan.vlc.repository.EqualizerRepository
 import org.videolan.vlc.repository.SlaveRepository
 import kotlin.math.absoluteValue
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.EventListener, CoroutineScope {
     override val coroutineContext = Dispatchers.Main.immediate + SupervisorJob()
@@ -299,9 +301,52 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
         if (!mediaplayer.isReleased)  mediaplayer.title = title
     }
 
-    fun getVolume() = if (!mediaplayer.isReleased) mediaplayer.volume else 100
+    /**
+     * The volume that was asked for, ignoring any normalization on top.
+     *
+     * Callers set a volume and expect to read the same number back; the gain
+     * applied underneath is not theirs to see.
+     */
+    private var requestedVolume = 100
 
-    fun setVolume(volume: Int) = if (!mediaplayer.isReleased) mediaplayer.setVolume(volume) else -1
+    /** Linear factor from volume normalization. 1.0 is no change. */
+    private var normalizationFactor = 1.0
+
+    fun getVolume() = if (!mediaplayer.isReleased) requestedVolume else 100
+
+    fun setVolume(volume: Int): Int {
+        requestedVolume = volume
+        return applyVolume()
+    }
+
+    /**
+     * Apply a per track normalization gain, in dB.
+     *
+     * Deliberately libVLC's own software volume rather than an Android audio
+     * effect. Effects attach to an audio session and have to be told a channel
+     * count up front, which made them fragile across track and route changes and
+     * silenced playback outright on some tracks. This sits inside libVLC's
+     * pipeline, has no session to go stale, and multiplies rather than filters,
+     * so the worst it can do is be the wrong volume.
+     *
+     * Composes with everything else that sets volume, most importantly audio
+     * focus ducking: both are re-applied together whenever either changes.
+     */
+    fun setNormalizationGain(gainDb: Double) {
+        normalizationFactor = 10.0.pow(gainDb / 20.0)
+        // Always re-apply rather than short circuiting on an unchanged factor:
+        // libVLC can reset its volume when it opens new media, so this doubles
+        // as the place the intended volume is restored at the start of a track.
+        applyVolume()
+    }
+
+    private fun applyVolume(): Int {
+        if (mediaplayer.isReleased) return -1
+        val volume = (requestedVolume * normalizationFactor)
+            .roundToInt()
+            .coerceIn(0, MAX_LIBVLC_VOLUME)
+        return mediaplayer.setVolume(volume)
+    }
 
     suspend fun expand(): IMediaList? {
         return mediaplayer.media?.let {
@@ -382,3 +427,6 @@ private fun Array<IMedia.Slave>?.contains(item: IMedia.Slave) : Boolean {
     for (slave in this) if (slave.uri == item.uri) return true
     return false
 }
+
+/** libVLC's software volume tops out at 200%, i.e. +6 dB of amplification. */
+private const val MAX_LIBVLC_VOLUME = 200

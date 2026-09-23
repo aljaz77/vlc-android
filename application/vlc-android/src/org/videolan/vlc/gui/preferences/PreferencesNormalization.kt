@@ -238,13 +238,13 @@ class PreferencesNormalization : BasePreferenceFragment(),
         // Strength and album mode only do something for the methods that read them.
         findPreference<Preference>(KEY_NORMALIZATION_STRENGTH)?.isVisible = when (config.method) {
             NormalizationMethod.AUTO, NormalizationMethod.COMPRESSOR,
-            NormalizationMethod.LEVELER, NormalizationMethod.DEVICE -> true
+            NormalizationMethod.LEVELER -> true
             else -> false
         }
         findPreference<Preference>(KEY_NORMALIZATION_ALBUM_MODE)?.isVisible =
             config.method.usesReplayGain
         findPreference<Preference>(KEY_NORMALIZATION_MAX_BOOST)?.isVisible =
-            config.method.usesDeviceEffect
+            config.method.usesMeasuredLoudness
     }
 
     private fun methodDescription(method: NormalizationMethod) = when (method) {
@@ -253,7 +253,6 @@ class PreferencesNormalization : BasePreferenceFragment(),
         NormalizationMethod.MEASURED -> R.string.normalization_method_measured_desc
         NormalizationMethod.COMPRESSOR -> R.string.normalization_method_compressor_desc
         NormalizationMethod.LEVELER -> R.string.normalization_method_leveler_desc
-        NormalizationMethod.DEVICE -> R.string.normalization_method_device_desc
     }
 
     companion object {

@@ -535,14 +535,12 @@
     <string name="normalization_method_measured">Measured loudness</string>
     <string name="normalization_method_compressor">Dynamic compression</string>
     <string name="normalization_method_leveler">Volume leveler</string>
-    <string name="normalization_method_device">Device limiter</string>
 
     <string name="normalization_method_auto_desc">Measured loudness where available, with gentle compression for anything not measured yet. Recommended.</string>
     <string name="normalization_method_replaygain_desc">Uses the Replay Gain tags written into your files. Exact, but does nothing for untagged tracks.</string>
     <string name="normalization_method_measured_desc">Uses loudness measured by VLC itself. Needs the library analysis below.</string>
     <string name="normalization_method_compressor_desc">Squeezes the dynamic range so loud and quiet parts sit closer together. Works on anything, no tags needed.</string>
     <string name="normalization_method_leveler_desc">Watches the running average level and pulls down anything too loud. Never boosts.</string>
-    <string name="normalization_method_device_desc">Uses the audio processing built into your device. Changes apply instantly, but quality varies by device.</string>
 
     <string name="normalization_strength">Strength</string>
     <string name="normalization_strength_summary">How hard the levelling works. Higher is more consistent but less dynamic.</string>

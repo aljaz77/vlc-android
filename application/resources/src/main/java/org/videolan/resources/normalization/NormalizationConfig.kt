@@ -96,10 +96,7 @@ enum class NormalizationMethod(val key: String, val needsLibVlcRestart: Boolean)
     COMPRESSOR("compressor", true),
 
     /** libVLC's normvol: a running average that pulls down anything too loud. */
-    LEVELER("leveler", true),
-
-    /** Android's own DynamicsProcessing / LoudnessEnhancer on VLC's audio session. */
-    DEVICE("device", false);
+    LEVELER("leveler", true);
 
     /**
      * Whether this method wants libVLC's ReplayGain stage switched on.
@@ -113,10 +110,6 @@ enum class NormalizationMethod(val key: String, val needsLibVlcRestart: Boolean)
     /** Whether this method wants a per track gain from the loudness database. */
     val usesMeasuredLoudness: Boolean
         get() = this == AUTO || this == MEASURED
-
-    /** Whether this method is applied through an Android audio effect rather than libVLC. */
-    val usesDeviceEffect: Boolean
-        get() = this == AUTO || this == MEASURED || this == DEVICE
 
     companion object {
         fun fromKey(key: String?) = entries.firstOrNull { it.key == key } ?: AUTO
@@ -246,6 +239,22 @@ data class NormalizationConfig(
     }
 
     /**
+     * The gain to apply to a track, in dB, given what we measured about it.
+     *
+     * Returns 0 when there is no measurement: a track we know nothing about is
+     * better played at its own level than at a guess.
+     */
+    fun gainFor(integratedLufs: Double?, samplePeakDb: Double?): Double {
+        if (!enabled || !method.usesMeasuredLoudness || integratedLufs == null) return 0.0
+        var gain = (targetLufs - integratedLufs).coerceAtMost(maxBoostDb)
+        if (peakLimiter) {
+            // Hold back a boost that would push the loudest sample into clipping.
+            samplePeakDb?.let { peak -> gain = gain.coerceAtMost(PEAK_CEILING_DB - peak) }
+        }
+        return gain.coerceIn(MIN_GAIN_DB, MAX_GAIN_DB)
+    }
+
+    /**
      * Parameters for libVLC's compressor filter.
      *
      * The mapping from an LUFS target to a dBFS threshold is a heuristic, not an
@@ -311,6 +320,13 @@ data class NormalizationConfig(
 
         /** Lines normvol's linear level up with our LUFS scale. */
         private const val NORMVOL_LEVEL_OFFSET_DB = 20.0
+
+        /** Leave a little headroom below full scale. */
+        private const val PEAK_CEILING_DB = -1.0
+
+        /** Hard bounds on the applied gain, whatever the measurement says. */
+        private const val MIN_GAIN_DB = -24.0
+        private const val MAX_GAIN_DB = 6.0
 
         const val DEFAULT_STRENGTH = 50
         const val DEFAULT_MAX_BOOST_DB = 12.0

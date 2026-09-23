@@ -134,7 +134,6 @@ import org.videolan.resources.VLCOptions
 import org.videolan.resources.normalization.NormalizationConfig
 import org.videolan.tools.ENABLE_ANDROID_AUTO_NORMALIZATION_BUTTON
 import org.videolan.tools.KEY_NORMALIZATION_ENABLED
-import org.videolan.vlc.audio.DeviceNormalizer
 import org.videolan.vlc.audio.LoudnessRepository
 import org.videolan.resources.WEARABLE_RESERVE_SLOT_SKIP_TO_NEXT
 import org.videolan.resources.WEARABLE_RESERVE_SLOT_SKIP_TO_PREV
@@ -237,12 +236,6 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     var headsetInserted = false
     private lateinit var wakeLock: PowerManager.WakeLock
     private val audioFocusHelper by lazy { VLCAudioFocusHelper(this) }
-    /**
-     * Volume normalization applied through Android's audio effect framework.
-     * Lives here because it follows the audio session, which follows the service.
-     */
-    val deviceNormalizer = DeviceNormalizer()
-
     private lateinit var browserCallback: MediaBrowserCallback
     var sleepTimerJob: Job? = null
     var waitForMediaEnd = false
@@ -934,7 +927,6 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
         //Call it once mediaSession is null, to not publish playback state
         stop(systemExit = true)
 
-        deviceNormalizer.release()
         unregisterReceiver(receiver)
         playlistManager.onServiceDestroyed()
     }
@@ -1005,9 +997,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
      * needs VLCInstance.restart() instead.
      */
     fun applyNormalization() {
-        val config = NormalizationConfig.from(settings)
-        deviceNormalizer.setConfig(config)
-        updateTrackLoudness(config)
+        updateTrackLoudness(NormalizationConfig.from(settings))
     }
 
     /**
@@ -1024,15 +1014,20 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
         val skip = !config.enabled || !config.method.usesMeasuredLoudness || uri == null ||
                 (media.type == MediaWrapper.TYPE_VIDEO && !config.applyToVideo)
         if (skip) {
-            deviceNormalizer.setTrackLoudness(null, null)
+            playlistManager.player.setNormalizationGain(0.0)
             return
         }
+        // Until the measurement is in, play the track at its own level rather
+        // than at whatever the previous one needed.
+        playlistManager.player.setNormalizationGain(0.0)
         lifecycleScope.launch {
             val loudness = LoudnessRepository.get(applicationContext, uri)
             // The track can change while the lookup is in flight; applying a gain
             // measured for the previous one would be worse than applying none.
             if (currentMediaWrapper?.uri != uri) return@launch
-            deviceNormalizer.setTrackLoudness(loudness?.integratedLufs, loudness?.samplePeakDb)
+            playlistManager.player.setNormalizationGain(
+                config.gainFor(loudness?.integratedLufs, loudness?.samplePeakDb)
+            )
             if (!config.analyzeWhilePlaying) return@launch
             if (loudness == null) LoudnessRepository.requestAnalysis(applicationContext, uri)
             playlistManager.getNextMedia()?.uri?.let {
@@ -1451,7 +1446,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
         if (!settings.getBoolean(ENABLE_ANDROID_AUTO_NORMALIZATION_BUTTON, true)) return
         if (!settings.contains(KEY_NORMALIZATION_ENABLED)) return
         val config = NormalizationConfig.from(settings)
-        if (!config.method.usesDeviceEffect) return
+        if (!config.method.usesMeasuredLoudness) return
         val resId = if (config.enabled) R.drawable.ic_auto_normalization_enabled
         else R.drawable.ic_auto_normalization_disabled
         pscb.addCustomAction(
