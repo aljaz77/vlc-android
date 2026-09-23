@@ -63,6 +63,7 @@ class LoudnessAnalysisService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         NotificationHelper.createNotificationChannels(applicationContext)
         // Android 8+ expects startForeground almost immediately after the
         // service starts, well before there is any progress to report.
@@ -154,12 +155,21 @@ class LoudnessAnalysisService : LifecycleService() {
         else 0
 
     override fun onDestroy() {
+        isRunning = false
         sweep?.cancel()
         super.onDestroy()
     }
 
     companion object {
         private const val ACTION_STOP = "org.videolan.vlc.action.STOP_LOUDNESS_ANALYSIS"
+
+        /**
+         * Whether a sweep is in progress, for the settings screen to decide
+         * whether its button starts one or stops the running one.
+         */
+        @Volatile
+        var isRunning = false
+            private set
 
         fun start(context: Context) {
             val intent = Intent(context, LoudnessAnalysisService::class.java)

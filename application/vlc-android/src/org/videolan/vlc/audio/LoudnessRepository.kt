@@ -33,9 +33,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.resources.normalization.NormalizationConfig
+import org.videolan.resources.AppContextProvider
 import org.videolan.tools.AppScope
 import org.videolan.tools.KEY_NORMALIZATION_ANALYSIS_ENABLED
 import org.videolan.tools.Settings
@@ -78,6 +81,9 @@ object LoudnessRepository {
 
     private val requests = Channel<Request>(Channel.UNLIMITED)
 
+    /** Serialises database writes; see [measure]. */
+    private val writeLock = Mutex()
+
     private val _analysisProgress = MutableStateFlow<AnalysisProgress?>(null)
 
     /** Progress of a running full library sweep, or null when none is running. */
@@ -89,16 +95,16 @@ object LoudnessRepository {
 
     private var watchingLibrary = false
     private var sweepJob: Job? = null
-    private var fullSweepJob: Job? = null
 
     /**
      * Whether a full library sweep is running right now.
      *
-     * Driven by [analyzeAll] rather than by a job handle, because the sweep runs
-     * inside LoudnessAnalysisService and this object does not own it.
+     * Answered by the service that actually does the work. Deriving it from the
+     * progress flow meant that if the sweep ended without clearing progress, the
+     * button stayed stuck on "stop" and there was no way to start another one.
      */
     val isSweeping: Boolean
-        get() = _analysisProgress.value != null
+        get() = LoudnessAnalysisService.isRunning
 
     init {
         startWorker()
@@ -166,9 +172,28 @@ object LoudnessRepository {
      */
     suspend fun analyzeAll(context: Context, tracks: List<Pair<Uri, String?>>) = coroutineScope {
         val applicationContext = context.applicationContext
-        val outstanding = tracks.filterNot { undecodable.contains(it.first.toString()) }
-        val total = outstanding.size
-        val done = AtomicInteger()
+        // Ask the database once which tracks are already measured, rather than
+        // per track as the sweep walks past them. Resuming a part finished sweep
+        // then starts where it left off instead of grinding through hundreds of
+        // lookups first, and the count it reports is the real one on disk.
+        val measured = withContext(Dispatchers.IO) {
+            try {
+                dao(applicationContext)
+                    .analyzedUris(TrackLoudness.CURRENT_ANALYZER_VERSION)
+                    .toHashSet()
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not list measured tracks", e)
+                hashSetOf()
+            }
+        }
+        val outstanding = tracks.filterNot {
+            val key = it.first.toString()
+            undecodable.contains(key) || key in measured
+        }
+        // Progress counts the whole library so the number means the same thing
+        // across runs, starting from whatever is already done.
+        val total = tracks.size
+        val done = AtomicInteger(total - outstanding.size)
 
         val queue = Channel<Pair<Uri, String?>>(Channel.UNLIMITED)
         outstanding.forEach { queue.trySend(it) }
@@ -182,15 +207,13 @@ object LoudnessRepository {
                     for (track in queue) {
                         _analysisProgress.value =
                             AnalysisProgress(done.get(), total, track.second)
-                        if (get(applicationContext, track.first) == null) {
-                            try {
-                                measure(applicationContext, track.first)
-                            } catch (e: CodecUnavailableException) {
-                                // Too many decoders in flight. Set it aside and
-                                // come back to it once the queue has drained.
-                                deferred.add(track)
-                                continue
-                            }
+                        try {
+                            measure(applicationContext, track.first)
+                        } catch (e: CodecUnavailableException) {
+                            // Too many decoders in flight. Set it aside and come
+                            // back to it once the queue has drained.
+                            deferred.add(track)
+                            continue
                         }
                         done.incrementAndGet()
                     }
@@ -199,14 +222,11 @@ object LoudnessRepository {
 
             // Whatever could not get a decoder first time round, one at a time.
             for (track in deferred.toList()) {
-                if (get(applicationContext, track.first) == null) {
-                    _analysisProgress.value =
-                        AnalysisProgress(done.get(), total, track.second)
-                    try {
-                        measure(applicationContext, track.first)
-                    } catch (e: CodecUnavailableException) {
-                        Log.w(TAG, "Still no decoder available for ${track.first}")
-                    }
+                _analysisProgress.value = AnalysisProgress(done.get(), total, track.second)
+                try {
+                    measure(applicationContext, track.first)
+                } catch (e: CodecUnavailableException) {
+                    Log.w(TAG, "Still no decoder available for ${track.first}")
                 }
                 done.incrementAndGet()
             }
@@ -229,10 +249,7 @@ object LoudnessRepository {
         LoudnessAnalysisService.start(context.applicationContext)
     }
 
-    fun cancelFullSweep() {
-        fullSweepJob?.cancel()
-        fullSweepJob = null
-    }
+    fun cancelFullSweep() = LoudnessAnalysisService.stop(AppContextProvider.appContext)
 
     /**
      * Queue every audio track in the library that has no measurement yet.
@@ -346,14 +363,25 @@ object LoudnessRepository {
             undecodable.add(key)
             return
         }
-        cache[key] = result
-        withContext(Dispatchers.IO) {
-            try {
-                dao(context).insert(result)
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not store measurement for $key", e)
+        val stored = withContext(Dispatchers.IO) {
+            // One writer at a time. Several workers inserting at once contend on
+            // the database, and a write that loses the race used to be logged and
+            // forgotten while the cache still claimed the track was measured, so
+            // the sweep looked complete and the next run found the rows missing.
+            writeLock.withLock {
+                try {
+                    dao(context).insert(result)
+                    true
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not store measurement for $key", e)
+                    false
+                }
             }
         }
+        // Only remember it once it is safely on disk. A track that failed to
+        // store stays unmeasured and gets picked up again rather than silently
+        // going missing.
+        if (stored) cache[key] = result
     }
 
     /**
