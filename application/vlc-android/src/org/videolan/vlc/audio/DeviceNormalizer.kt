@@ -26,6 +26,7 @@ import android.os.Build
 import android.util.Log
 import androidx.annotation.MainThread
 import androidx.annotation.RequiresApi
+import kotlin.math.abs
 import org.videolan.resources.VLCOptions
 import org.videolan.resources.normalization.NormalizationConfig
 import org.videolan.resources.normalization.NormalizationMethod
@@ -83,7 +84,6 @@ class DeviceNormalizer {
             release()
             return
         }
-        if (!attach()) return
         applyGain()
     }
 
@@ -150,16 +150,21 @@ class DeviceNormalizer {
     @RequiresApi(Build.VERSION_CODES.P)
     private fun attachDynamicsProcessing(sessionId: Int): Boolean {
         try {
+            // Input gain plus a limiter, and nothing else. An earlier version
+            // also built a one band multiband compressor and used the FFT
+            // variant; that combination silenced playback outright on at least
+            // one device, and none of it was needed to apply a per track gain.
             val effectConfig = DynamicsProcessing.Config.Builder(
-                DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+                DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION,
                 CHANNEL_COUNT,
                 /* preEqInUse = */ false, /* preEqBandCount = */ 0,
-                /* mbcInUse = */ true, /* mbcBandCount = */ 1,
+                /* mbcInUse = */ false, /* mbcBandCount = */ 0,
                 /* postEqInUse = */ false, /* postEqBandCount = */ 0,
                 /* limiterInUse = */ true
             ).build()
             dynamicsProcessing = DynamicsProcessing(EFFECT_PRIORITY, sessionId, effectConfig)
                 .apply { enabled = true }
+            Log.i(TAG, "DynamicsProcessing attached to audio session $sessionId")
             return true
         } catch (e: Exception) {
             // UnsupportedOperationException, RuntimeException and IllegalArgumentException
@@ -173,6 +178,7 @@ class DeviceNormalizer {
     private fun attachLoudnessEnhancer(sessionId: Int): Boolean {
         return try {
             loudnessEnhancer = LoudnessEnhancer(sessionId).apply { enabled = true }
+            Log.i(TAG, "LoudnessEnhancer attached to audio session $sessionId")
             true
         } catch (e: Exception) {
             Log.w(TAG, "No usable audio effect on this device; " +
@@ -189,6 +195,20 @@ class DeviceNormalizer {
     private fun applyGain() {
         val config = config ?: return
         val gain = effectiveGainDb(config)
+        if (!isActive) {
+            // Nothing to correct on this track, so leave the audio path alone
+            // rather than attaching an effect to apply 0 dB.
+            if (abs(gain) < MIN_MEANINGFUL_GAIN_DB) return
+            if (!attach()) return
+        }
+        Log.i(
+            TAG,
+            "normalization gain %.1f dB (method=%s target=%.1f measured=%s peak=%s)".format(
+                gain, config.method.key, config.targetLufs,
+                trackGainDb?.let { "%.1f".format(config.targetLufs - it) } ?: "none",
+                trackTruePeakDb?.let { "%.1f".format(it) } ?: "none"
+            )
+        )
         dynamicsProcessing?.let { applyToDynamicsProcessing(it, config, gain) }
         loudnessEnhancer?.let { applyToLoudnessEnhancer(it, gain) }
     }
@@ -234,37 +254,16 @@ class DeviceNormalizer {
                 postGain = 0f
             }
             effect.setLimiterAllChannelsTo(limiter)
-            applyMbc(effect, config)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to configure DynamicsProcessing", e)
+            // Never leave a half configured effect sitting on the audio session:
+            // a broken DynamicsProcessing can silence playback entirely. Drop it
+            // and let the libVLC side of normalization carry on alone.
+            Log.w(TAG, "Failed to configure DynamicsProcessing; detaching it", e)
+            release()
+            unavailable = true
         }
     }
 
-    /**
-     * The single band compressor stage. Only the device method drives it; the
-     * other methods either compress inside libVLC or do not compress at all, and
-     * stacking two compressors sounds worse than either one alone.
-     */
-    @RequiresApi(Build.VERSION_CODES.P)
-    private fun applyMbc(effect: DynamicsProcessing, config: NormalizationConfig) {
-        val compressing = config.method == NormalizationMethod.DEVICE
-        val band = effect.getMbcBandByChannelIndex(0, 0).apply {
-            isEnabled = compressing
-            if (compressing) {
-                val strength = config.strength.coerceIn(0, 100) / 100.0
-                threshold = (config.targetLufs + MBC_THRESHOLD_ABOVE_TARGET_DB).toFloat()
-                ratio = (2.0 + strength * 8.0).toFloat()
-                attackTime = (50.0 - strength * 40.0).toFloat()
-                releaseTime = (500.0 - strength * 300.0).toFloat()
-                kneeWidth = (10.0 - strength * 7.0).toFloat()
-                postGain = 0f
-                preGain = 0f
-                noiseGateThreshold = MBC_NOISE_GATE_DB
-                expanderRatio = 1f
-            }
-        }
-        effect.setMbcBandAllChannelsTo(0, band)
-    }
 
     private fun applyToLoudnessEnhancer(effect: LoudnessEnhancer, gainDb: Double) {
         try {
@@ -296,10 +295,11 @@ class DeviceNormalizer {
         private const val LIMITER_ATTACK_MS = 1f
         private const val LIMITER_RELEASE_MS = 60f
 
-        private const val MBC_THRESHOLD_ABOVE_TARGET_DB = 3.0
-        private const val MBC_NOISE_GATE_DB = -90f
 
         private const val MILLIBELS_PER_DB = 100.0
+
+        /** Below this the correction is inaudible and not worth an audio effect. */
+        private const val MIN_MEANINGFUL_GAIN_DB = 0.2
 
         /** Hard bounds on the applied gain, whatever the measurement says. */
         private const val MIN_GAIN_DB = -24.0

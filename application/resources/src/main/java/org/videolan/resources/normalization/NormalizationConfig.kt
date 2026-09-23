@@ -211,9 +211,13 @@ data class NormalizationConfig(
         val s = effectiveStrength.coerceIn(0, 100) / 100.0
         val threshold = (targetLufs + THRESHOLD_ABOVE_TARGET_DB).coerceIn(-30.0, 0.0)
         val ratio = (2.0 + s * 8.0).coerceIn(1.0, 20.0)
-        // Restore the level the compressor just took away, then push on towards the
-        // target. Capped well below the filter's own 24 dB maximum to avoid distortion.
-        val makeup = (targetOffsetDb + s * 6.0).coerceIn(0.0, MAX_MAKEUP_GAIN_DB)
+        // Only restore roughly what the compressor itself took away. Makeup used
+        // to include the distance from the reference to the target as well, which
+        // meant every track came out several dB louder than its source regardless
+        // of how loud it already was: a compressor cannot know a track's loudness,
+        // so it has no business chasing a target. The threshold above tracks the
+        // target; this just stops the compression sounding lifeless.
+        val makeup = (s * 4.0).coerceIn(0.0, MAX_MAKEUP_GAIN_DB)
         val attack = (50.0 - s * 40.0).coerceIn(1.5, 400.0)
         val release = (500.0 - s * 300.0).coerceIn(2.0, 800.0)
         val knee = (10.0 - s * 7.0).coerceIn(1.0, 10.0)
@@ -254,7 +258,7 @@ data class NormalizationConfig(
         private const val THRESHOLD_ABOVE_TARGET_DB = 3.0
 
         /** Well below the filter's own 24 dB ceiling, to stay clear of distortion. */
-        private const val MAX_MAKEUP_GAIN_DB = 12.0
+        private const val MAX_MAKEUP_GAIN_DB = 6.0
 
         /** 0 is pure RMS, 1 is pure peak. A little peak sensitivity sounds more natural. */
         private const val RMS_PEAK = 0.2
