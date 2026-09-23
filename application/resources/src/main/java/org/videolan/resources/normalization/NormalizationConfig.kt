@@ -29,6 +29,7 @@ import org.videolan.tools.KEY_NORMALIZATION_ENABLED
 import org.videolan.tools.KEY_NORMALIZATION_MAX_BOOST
 import org.videolan.tools.KEY_NORMALIZATION_METHOD
 import org.videolan.tools.KEY_NORMALIZATION_PEAK_LIMITER
+import org.videolan.tools.KEY_NORMALIZATION_PERFORMANCE
 import org.videolan.tools.KEY_NORMALIZATION_STRENGTH
 import org.videolan.tools.KEY_NORMALIZATION_TARGET
 import java.util.Locale
@@ -123,6 +124,49 @@ enum class NormalizationMethod(val key: String, val needsLibVlcRestart: Boolean)
 }
 
 /**
+ * How much of the device to spend on loudness analysis.
+ *
+ * Analysis decodes tracks as fast as the hardware allows, so the only real
+ * question is how many to decode at once. More is faster and warmer; fewer
+ * leaves the phone free for everything else.
+ *
+ * [concurrencyFor] resolves against the actual core count, because a fixed
+ * number would be either wasteful or overwhelming depending on the device.
+ */
+enum class AnalysisPerformance(val key: String) {
+    /** One track at a time. Barely noticeable, and slow. */
+    SLOW("slow"),
+
+    /** A quarter of the cores. */
+    MEDIUM("medium"),
+
+    /** Half the cores. A good default on anything modern. */
+    FAST("fast"),
+
+    /** Every core. Fastest, and the phone will get warm. */
+    MAXIMUM("maximum");
+
+    fun concurrencyFor(cores: Int): Int = when (this) {
+        SLOW -> 1
+        MEDIUM -> cores / 4
+        FAST -> cores / 2
+        MAXIMUM -> cores
+    }.coerceIn(1, MAX_CONCURRENCY)
+
+    companion object {
+        /**
+         * Android only guarantees a modest number of concurrent codec
+         * instances, and going past it fails the decode rather than queueing.
+         */
+        const val MAX_CONCURRENCY = 8
+
+        val DEFAULT = FAST
+
+        fun fromKey(key: String?) = entries.firstOrNull { it.key == key } ?: DEFAULT
+    }
+}
+
+/**
  * A snapshot of the user's volume normalization preferences, plus the derivation
  * of the libVLC command line options that implement them.
  *
@@ -143,7 +187,9 @@ data class NormalizationConfig(
     /** Use album rather than track ReplayGain, preserving relative loudness within an album. */
     val albumMode: Boolean,
     /** Measure tracks in the background as they are played. */
-    val analyzeWhilePlaying: Boolean
+    val analyzeWhilePlaying: Boolean,
+    /** How many tracks to analyse at once. */
+    val analysisPerformance: AnalysisPerformance
 ) {
 
     /** The effective target, resolving [LoudnessTarget.CUSTOM]. */
@@ -287,7 +333,10 @@ data class NormalizationConfig(
                 ?.toDoubleOrNull() ?: DEFAULT_MAX_BOOST_DB,
             applyToVideo = prefs.getBoolean(KEY_NORMALIZATION_APPLY_TO_VIDEO, false),
             albumMode = prefs.getBoolean(KEY_NORMALIZATION_ALBUM_MODE, false),
-            analyzeWhilePlaying = prefs.getBoolean(KEY_NORMALIZATION_ANALYSIS_ENABLED, true)
+            analyzeWhilePlaying = prefs.getBoolean(KEY_NORMALIZATION_ANALYSIS_ENABLED, true),
+            analysisPerformance = AnalysisPerformance.fromKey(
+                prefs.getString(KEY_NORMALIZATION_PERFORMANCE, null)
+            )
         )
     }
 }

@@ -558,6 +558,14 @@
     <string name="normalization_analysis_category">Loudness analysis</string>
     <string name="normalization_analysis_enabled">Measure tracks automatically</string>
     <string name="normalization_analysis_enabled_summary">Measure the real loudness of tracks in the background, as they play and when new ones are added to the library, so they can be levelled exactly. No tags needed.</string>
+    <string name="normalization_performance">Performance profile</string>
+    <string name="normalization_performance_summary">%s</string>
+    <string name="normalization_performance_slow">Slow — one track at a time</string>
+    <string name="normalization_performance_medium">Medium</string>
+    <string name="normalization_performance_fast">Fast</string>
+    <string name="normalization_performance_maximum">Maximum — all cores, phone will warm up</string>
+    <string name="normalization_analyze_notification_title">Measuring track loudness</string>
+    <string name="normalization_analyze_notification_preparing">Preparing…</string>
     <string name="normalization_analyze_library">Analyze the whole library now</string>
     <string name="normalization_analyze_library_summary">%1$d of %2$d tracks measured</string>
     <string name="normalization_analyze_running">Measuring %1$d of %2$d</string>

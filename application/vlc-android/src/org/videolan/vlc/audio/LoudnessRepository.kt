@@ -91,9 +91,14 @@ object LoudnessRepository {
     private var sweepJob: Job? = null
     private var fullSweepJob: Job? = null
 
-    /** Whether a full library sweep is running right now. */
+    /**
+     * Whether a full library sweep is running right now.
+     *
+     * Driven by [analyzeAll] rather than by a job handle, because the sweep runs
+     * inside LoudnessAnalysisService and this object does not own it.
+     */
     val isSweeping: Boolean
-        get() = fullSweepJob?.isActive == true
+        get() = _analysisProgress.value != null
 
     init {
         startWorker()
@@ -171,17 +176,40 @@ object LoudnessRepository {
 
         try {
             _analysisProgress.value = AnalysisProgress(0, total, null)
-            List(sweepConcurrency()) {
+            val deferred = Collections.synchronizedList(mutableListOf<Pair<Uri, String?>>())
+            List(sweepConcurrency(applicationContext)) {
                 launch(Dispatchers.Default) {
-                    for ((uri, title) in queue) {
-                        _analysisProgress.value = AnalysisProgress(done.get(), total, title)
-                        if (get(applicationContext, uri) == null) {
-                            measure(applicationContext, uri)
+                    for (track in queue) {
+                        _analysisProgress.value =
+                            AnalysisProgress(done.get(), total, track.second)
+                        if (get(applicationContext, track.first) == null) {
+                            try {
+                                measure(applicationContext, track.first)
+                            } catch (e: CodecUnavailableException) {
+                                // Too many decoders in flight. Set it aside and
+                                // come back to it once the queue has drained.
+                                deferred.add(track)
+                                continue
+                            }
                         }
                         done.incrementAndGet()
                     }
                 }
             }.joinAll()
+
+            // Whatever could not get a decoder first time round, one at a time.
+            for (track in deferred.toList()) {
+                if (get(applicationContext, track.first) == null) {
+                    _analysisProgress.value =
+                        AnalysisProgress(done.get(), total, track.second)
+                    try {
+                        measure(applicationContext, track.first)
+                    } catch (e: CodecUnavailableException) {
+                        Log.w(TAG, "Still no decoder available for ${track.first}")
+                    }
+                }
+                done.incrementAndGet()
+            }
             _analysisProgress.value = AnalysisProgress(done.get(), total, null)
         } finally {
             _analysisProgress.value = null
@@ -198,15 +226,7 @@ object LoudnessRepository {
      */
     fun startFullSweep(context: Context) {
         if (isSweeping) return
-        val applicationContext = context.applicationContext
-        fullSweepJob = AppScope.launch(Dispatchers.Default) {
-            val tracks = withContext(Dispatchers.IO) {
-                Medialibrary.getInstance().audio
-                    ?.mapNotNull { mw -> mw.uri?.let { it to mw.title } }
-                    ?: emptyList()
-            }
-            analyzeAll(applicationContext, tracks)
-        }
+        LoudnessAnalysisService.start(context.applicationContext)
     }
 
     fun cancelFullSweep() {
@@ -308,6 +328,8 @@ object LoudnessRepository {
             for (request in requests) {
                 try {
                     measure(request.context, request.uri)
+                } catch (e: CodecUnavailableException) {
+                    Log.d(TAG, "No decoder free for ${request.uri}; will retry later")
                 } catch (e: Exception) {
                     Log.w(TAG, "Analysis failed for ${request.uri}", e)
                 } finally {
@@ -335,18 +357,16 @@ object LoudnessRepository {
     }
 
     /**
-     * How many tracks to decode at once during a user driven sweep.
-     *
-     * Half the cores, capped: the decoders rather than the CPU are the
-     * bottleneck, and leaving headroom keeps the phone usable while it works.
+     * How many tracks to decode at once during a user driven sweep, from the
+     * performance profile the user picked.
      */
-    private fun sweepConcurrency() =
-        (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, MAX_SWEEP_CONCURRENCY)
+    private fun sweepConcurrency(context: Context) =
+        NormalizationConfig.from(Settings.getInstance(context))
+            .analysisPerformance
+            .concurrencyFor(Runtime.getRuntime().availableProcessors())
 
     private fun dao(context: Context): TrackLoudnessDao =
         MediaDatabase.getInstance(context).trackLoudnessDao()
-
-    private const val MAX_SWEEP_CONCURRENCY = 4
 
     /** A library scan reports additions in bursts; wait for it to settle. */
     private const val SWEEP_DEBOUNCE_MS = 10_000L

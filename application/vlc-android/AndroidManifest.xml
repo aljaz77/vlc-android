@@ -1071,6 +1071,10 @@
         <service
                 android:name=".MediaParsingService"
                 android:foregroundServiceType="dataSync" />
+        <service
+                android:name=".audio.LoudnessAnalysisService"
+                android:exported="false"
+                android:foregroundServiceType="dataSync" />
         <receiver
             android:name=".widget.VLCAppWidgetProviderWhite"
             android:exported="false"

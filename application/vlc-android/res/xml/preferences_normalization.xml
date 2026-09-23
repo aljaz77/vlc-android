@@ -118,6 +118,17 @@
             app:iconSpaceReserved="false"
             app:singleLineTitle="false"/>
 
+        <ListPreference
+            android:defaultValue="fast"
+            android:dependency="normalization_enabled"
+            android:entries="@array/normalization_performance_entries"
+            android:entryValues="@array/normalization_performance_values"
+            android:key="normalization_performance"
+            android:summary="@string/normalization_performance_summary"
+            android:title="@string/normalization_performance"
+            app:iconSpaceReserved="false"
+            app:singleLineTitle="false"/>
+
         <Preference
             android:key="normalization_analyze_library"
             android:title="@string/normalization_analyze_library"

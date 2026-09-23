@@ -48,6 +48,9 @@ private const val TAG = "VLC/LoudnessAnalyzer"
  * is an expected outcome, not an exceptional one. [analyze] returns null and the
  * caller falls back to whichever realtime method is configured.
  */
+/** The device had no decoder free. The file itself may be perfectly fine. */
+class CodecUnavailableException(cause: Throwable) : Exception(cause)
+
 object LoudnessAnalyzer {
 
     /**
@@ -95,6 +98,16 @@ object LoudnessAnalyzer {
                 samplePeakDb = meter.samplePeakDb,
                 analyzedAt = System.currentTimeMillis()
             )
+        } catch (e: MediaCodec.CodecException) {
+            // Running several analyses at once can exhaust the codec pool. That
+            // says nothing about the file, so let the caller retry it later
+            // rather than writing the track off as undecodable.
+            if (e.isTransient || e.isRecoverable) throw CodecUnavailableException(e)
+            Log.d(TAG, "Could not analyze $uri: ${e.message}")
+            return null
+        } catch (e: IllegalStateException) {
+            // createDecoderByType throws this when no decoder can be allocated.
+            throw CodecUnavailableException(e)
         } catch (e: Exception) {
             // Unsupported codec, DRM, missing file, malformed container: all of
             // these are ordinary and mean only that this track stays unmeasured.

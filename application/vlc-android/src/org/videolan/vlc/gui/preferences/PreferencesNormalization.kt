@@ -47,11 +47,13 @@ import org.videolan.tools.KEY_NORMALIZATION_ENABLED
 import org.videolan.tools.KEY_NORMALIZATION_MAX_BOOST
 import org.videolan.tools.KEY_NORMALIZATION_METHOD
 import org.videolan.tools.KEY_NORMALIZATION_PEAK_LIMITER
+import org.videolan.tools.KEY_NORMALIZATION_PERFORMANCE
 import org.videolan.tools.KEY_NORMALIZATION_STRENGTH
 import org.videolan.tools.KEY_NORMALIZATION_TARGET
 import org.videolan.tools.putSingle
 import org.videolan.vlc.PlaybackService
 import org.videolan.vlc.R
+import org.videolan.vlc.audio.LoudnessAnalysisService
 import org.videolan.vlc.audio.LoudnessRepository
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.restartMediaPlayer
@@ -106,7 +108,7 @@ class PreferencesNormalization : BasePreferenceFragment(),
             KEY_ANALYZE_LIBRARY -> {
                 // A second tap while a sweep is running stops it rather than
                 // starting a second one.
-                if (LoudnessRepository.isSweeping) LoudnessRepository.cancelFullSweep()
+                if (LoudnessRepository.isSweeping) LoudnessAnalysisService.stop(requireContext())
                 else LoudnessRepository.startFullSweep(requireContext())
                 return true
             }
@@ -163,7 +165,7 @@ class PreferencesNormalization : BasePreferenceFragment(),
             KEY_NORMALIZATION_ENABLED, KEY_NORMALIZATION_METHOD, KEY_NORMALIZATION_TARGET,
             KEY_NORMALIZATION_STRENGTH, KEY_NORMALIZATION_PEAK_LIMITER,
             KEY_NORMALIZATION_ALBUM_MODE, KEY_NORMALIZATION_APPLY_TO_VIDEO,
-            KEY_NORMALIZATION_ANALYSIS_ENABLED -> Unit
+            KEY_NORMALIZATION_ANALYSIS_ENABLED, KEY_NORMALIZATION_PERFORMANCE -> Unit
             else -> return
         }
         updateSummaries()

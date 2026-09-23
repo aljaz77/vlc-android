@@ -421,6 +421,7 @@ const val KEY_NORMALIZATION_MAX_BOOST = "normalization_max_boost"
 const val KEY_NORMALIZATION_APPLY_TO_VIDEO = "normalization_apply_to_video"
 const val KEY_NORMALIZATION_ALBUM_MODE = "normalization_album_mode"
 const val KEY_NORMALIZATION_ANALYSIS_ENABLED = "normalization_analysis_enabled"
+const val KEY_NORMALIZATION_PERFORMANCE = "normalization_performance"
 
 //Queue behaviour
 const val KEY_PLAY_NOW_MODE = "play_now_mode"
