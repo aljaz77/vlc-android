@@ -29,6 +29,7 @@ import android.content.ContentUris
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
@@ -430,6 +431,7 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
             if (!isActive) return@launch
             playbackService.awaitMedialibraryStarted()
             val vsp = VoiceSearchParams(query ?: "", extras)
+            Log.i(TAG, "onPlayFromSearch query=\"$query\" focus=${extras?.getString(MediaStore.EXTRA_MEDIA_FOCUS)} title=${extras?.getString(MediaStore.EXTRA_MEDIA_TITLE)} artist=${extras?.getString(MediaStore.EXTRA_MEDIA_ARTIST)}")
             var tracks = when {
                 vsp.isAny -> playbackService.medialibrary.audio
                 vsp.isSongFocus -> searchForSong(vsp.song, vsp.artist)
@@ -449,24 +451,21 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
             if (!isActive) return@launch
             var matchedSpecificTrack = vsp.isSongFocus && !tracks.isNullOrEmpty()
             if (tracks.isNullOrEmpty() && items.isNullOrEmpty() && query?.isNotEmpty() == true) {
-                playbackService.medialibrary.search(query, Settings.includeMissing, false)?.run {
-                    // A spoken query naming one song is the common case, so
-                    // matching tracks are considered before anything else. They
-                    // used to be ignored entirely here, which meant that asking
-                    // for a song played its album, or its artist, or nothing.
-                    val ranked = VoiceSearchMatcher.rankQuery(
-                        this.tracks?.toList() ?: emptyList(), query
-                    )
-                    tracks = when {
-                        ranked.isNotEmpty() -> {
-                            matchedSpecificTrack = true
-                            ranked.toTypedArray()
+                // A spoken query naming one song is the common case, so matching
+                // tracks are considered before anything else.
+                val ranked = searchTracksForQuery(query, vsp)
+                if (ranked.isNotEmpty()) {
+                    matchedSpecificTrack = true
+                    tracks = ranked.toTypedArray()
+                } else {
+                    playbackService.medialibrary.search(query, Settings.includeMissing, false)?.run {
+                        tracks = when {
+                            !albums.isNullOrEmpty() -> albums!!.flatMap { it.tracks.toList() }.toTypedArray()
+                            !artists.isNullOrEmpty() -> artists!!.flatMap { it.tracks.toList() }.toTypedArray()
+                            !playlists.isNullOrEmpty() -> playlists!!.flatMap { it.tracks.toList() }.toTypedArray()
+                            !genres.isNullOrEmpty() -> genres!!.flatMap { it.tracks.toList() }.toTypedArray()
+                            else -> null
                         }
-                        !albums.isNullOrEmpty() -> albums!!.flatMap { it.tracks.toList() }.toTypedArray()
-                        !artists.isNullOrEmpty() -> artists!!.flatMap { it.tracks.toList() }.toTypedArray()
-                        !playlists.isNullOrEmpty() -> playlists!!.flatMap { it.tracks.toList() }.toTypedArray()
-                        !genres.isNullOrEmpty() -> genres!!.flatMap { it.tracks.toList() }.toTypedArray()
-                        else -> null
                     }
                 }
             }
@@ -485,11 +484,51 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
                             vsp.isAny == !playbackService.isShuffling -> playbackService.shuffle()
                         }
                     }
-                    playbackService.hasMedia() -> playbackService.play()
-                    else -> playbackService.displayPlaybackError(R.string.search_no_result)
+                    // Resume only when nothing was actually asked for. Resuming
+                    // after a search that found nothing looks exactly like the
+                    // command having worked, which is how a broken voice search
+                    // manages to go unnoticed.
+                    query.isNullOrBlank() && playbackService.hasMedia() -> playbackService.play()
+                    else -> {
+                        Log.i(TAG, "No match for voice search \"$query\"")
+                        playbackService.displayPlaybackError(R.string.search_no_result)
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * Look for tracks matching a spoken query, trying several phrasings of it.
+     *
+     * The medialibrary search is a plain substring match over the string it is
+     * given. A voice assistant hands over the whole utterance, which routinely
+     * carries more than the title: "alive by pearl jam" matches no stored title
+     * at all, so searching it verbatim returns nothing and the request quietly
+     * does nothing. Searching the structured title from the extras, the raw
+     * utterance, and the utterance with a trailing "by <artist>" removed, then
+     * ranking everything found against the original query, covers the shapes an
+     * assistant actually sends.
+     */
+    private fun searchTracksForQuery(query: String, vsp: VoiceSearchParams): List<MediaWrapper> {
+        val ml = playbackService.medialibrary
+        val attempts = LinkedHashSet<String>()
+        vsp.song?.trim()?.takeIf { it.isNotEmpty() }?.let { attempts.add(it) }
+        query.trim().takeIf { it.isNotEmpty() }?.let { attempts.add(it) }
+        VoiceSearchMatcher.parse(query).title.takeIf { it.isNotEmpty() }?.let { attempts.add(it) }
+
+        // Keyed by id so the same track found by two phrasings is only ranked once.
+        val found = LinkedHashMap<Long, MediaWrapper>()
+        for (attempt in attempts) {
+            ml.searchMedia(attempt)?.forEach {
+                if (MediaSessionBrowser.isMediaAudio(it)) found[it.id] = it
+            }
+            ml.search(attempt, Settings.includeMissing, false)?.tracks?.forEach {
+                if (MediaSessionBrowser.isMediaAudio(it)) found[it.id] = it
+            }
+        }
+        Log.i(TAG, "Voice search tried ${attempts.size} phrasings, found ${found.size} candidates")
+        return VoiceSearchMatcher.rankQuery(found.values.toList(), query)
     }
 
     /**
