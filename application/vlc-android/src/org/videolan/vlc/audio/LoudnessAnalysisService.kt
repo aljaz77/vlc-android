@@ -27,11 +27,15 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.getSystemService
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -52,9 +56,12 @@ import org.videolan.vlc.gui.helpers.NotificationHelper
  * with an ongoing notification keeps it running and shows progress, and gives
  * somewhere to put a stop button.
  */
+private const val TAG = "VLC/LoudnessAnalysis"
+
 class LoudnessAnalysisService : LifecycleService() {
 
     private var sweep: Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent): IBinder? {
         super.onBind(intent)
@@ -86,21 +93,56 @@ class LoudnessAnalysisService : LifecycleService() {
 
     private fun startSweep() {
         observeProgress()
+        acquireWakeLock()
         sweep = lifecycleScope.launch {
-            val tracks = withContext(Dispatchers.IO) {
-                Medialibrary.getInstance().audio
-                    ?.mapNotNull { mw -> mw.uri?.let { it to mw.title } }
-                    ?: emptyList()
+            try {
+                val tracks = withContext(Dispatchers.IO) {
+                    Medialibrary.getInstance().audio
+                        ?.mapNotNull { mw -> mw.uri?.let { it to mw.title } }
+                        ?: emptyList()
+                }
+                LoudnessRepository.analyzeAll(applicationContext, tracks)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A sweep that died on an unexpected error used to leave the
+                // service running and marked busy for ever, so the button could
+                // never start another one.
+                Log.w(TAG, "Loudness sweep failed", e)
+            } finally {
+                stopSelf()
             }
-            LoudnessRepository.analyzeAll(applicationContext, tracks)
-            stopSelf()
         }
     }
 
     private fun stopSweep() {
+        // Clear this straight away rather than waiting for onDestroy. stopSelf is
+        // asynchronous, and until the service is actually torn down the settings
+        // screen would still think a sweep was running and refuse to start one.
+        isRunning = false
         sweep?.cancel()
         sweep = null
+        LoudnessRepository.clearProgress()
         stopSelf()
+    }
+
+    /**
+     * Keep the CPU awake for the duration.
+     *
+     * A foreground service is not enough on its own: once the screen goes off
+     * the device suspends the CPU and the decoding simply stops until something
+     * wakes it. The same reason PlaybackService holds one while playing.
+     */
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        wakeLock = getSystemService<PowerManager>()
+            ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+            ?.apply { acquire(WAKE_LOCK_TIMEOUT_MS) }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.takeIf { it.isHeld }?.release()
+        wakeLock = null
     }
 
     /**
@@ -157,11 +199,20 @@ class LoudnessAnalysisService : LifecycleService() {
     override fun onDestroy() {
         isRunning = false
         sweep?.cancel()
+        releaseWakeLock()
+        LoudnessRepository.clearProgress()
         super.onDestroy()
     }
 
     companion object {
         private const val ACTION_STOP = "org.videolan.vlc.action.STOP_LOUDNESS_ANALYSIS"
+        private const val WAKE_LOCK_TAG = "VLC:LoudnessAnalysis"
+
+        /**
+         * A safety net, not a budget. The sweep releases the lock when it
+         * finishes; this only stops a wedged one holding the CPU awake for ever.
+         */
+        private const val WAKE_LOCK_TIMEOUT_MS = 2 * 60 * 60 * 1000L
 
         /**
          * Whether a sweep is in progress, for the settings screen to decide

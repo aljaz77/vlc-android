@@ -110,6 +110,13 @@ class PreferencesNormalization : BasePreferenceFragment(),
                 // starting a second one.
                 if (LoudnessRepository.isSweeping) LoudnessAnalysisService.stop(requireContext())
                 else LoudnessRepository.startFullSweep(requireContext())
+                // Refresh straight away rather than waiting for the progress
+                // flow to emit: a sweep that has just been stopped, or one that
+                // stalled, may never emit again, leaving the button looking
+                // unresponsive and the count frozen.
+                lifecycleScope.launch {
+                    updateAnalysisSummary(LoudnessRepository.analysisProgress.value)
+                }
                 return true
             }
             KEY_CLEAR_ANALYSIS -> {

@@ -312,6 +312,16 @@ object LoudnessRepository {
         }
     }
 
+    /**
+     * Forget any reported progress.
+     *
+     * Called when the sweep's service goes away, so a stalled or failed sweep
+     * does not leave the settings screen showing a figure that will never move.
+     */
+    fun clearProgress() {
+        _analysisProgress.value = null
+    }
+
     /** How many tracks have a stored measurement. */
     suspend fun analyzedCount(context: Context): Int = withContext(Dispatchers.IO) {
         try {
