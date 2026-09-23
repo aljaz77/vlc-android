@@ -515,6 +515,7 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
         val attempts = LinkedHashSet<String>()
         vsp.song?.trim()?.takeIf { it.isNotEmpty() }?.let { attempts.add(it) }
         query.trim().takeIf { it.isNotEmpty() }?.let { attempts.add(it) }
+        VoiceSearchMatcher.stripLeadingNoise(query).takeIf { it.isNotEmpty() }?.let { attempts.add(it) }
         VoiceSearchMatcher.parse(query).title.takeIf { it.isNotEmpty() }?.let { attempts.add(it) }
 
         // Keyed by id so the same track found by two phrasings is only ranked once.
@@ -527,8 +528,20 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
                 if (MediaSessionBrowser.isMediaAudio(it)) found[it.id] = it
             }
         }
-        Log.i(TAG, "Voice search tried ${attempts.size} phrasings, found ${found.size} candidates")
-        return VoiceSearchMatcher.rankQuery(found.values.toList(), query)
+        val ranked = VoiceSearchMatcher.rankQuery(found.values.toList(), query)
+        if (ranked.isNotEmpty()) {
+            Log.i(TAG, "Voice search matched ${ranked.size} of ${found.size} candidates from ${attempts.size} phrasings")
+            return ranked
+        }
+
+        // Nothing the database could match on its own. It compares raw substrings,
+        // so it cannot see that "two of us" and "2 of us" are the same title, or
+        // look past an accent or a stray apostrophe. Rank the library directly
+        // instead, which applies the same folding to both sides. Only worth doing
+        // once the cheap queries have all come back empty.
+        val everything = playbackService.medialibrary.audio?.toList() ?: emptyList()
+        Log.i(TAG, "Voice search fell back to scanning ${everything.size} tracks")
+        return VoiceSearchMatcher.rankQuery(everything, query)
     }
 
     /**

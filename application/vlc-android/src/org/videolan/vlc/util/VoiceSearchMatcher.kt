@@ -49,7 +49,8 @@ object VoiceSearchMatcher {
     /**
      * Split a raw query on a trailing "by <artist>", if there is one.
      */
-    fun parse(query: String): Query {
+    fun parse(rawQuery: String): Query {
+        val query = stripLeadingNoise(rawQuery)
         val separator = BY_SEPARATORS.firstOrNull { query.contains(it, ignoreCase = true) }
             ?: return Query(query.trim(), null)
         val index = query.lastIndexOf(separator, ignoreCase = true)
@@ -57,6 +58,28 @@ object VoiceSearchMatcher {
         val artist = query.substring(index + separator.length).trim()
         return if (title.isNotEmpty() && artist.isNotEmpty()) Query(title, artist)
         else Query(query.trim(), null)
+    }
+
+    /**
+     * Drop the words people say around a title but never put in one.
+     *
+     * "play the song two of us" is a request for a track called "2 of us", not
+     * for one called "the song two of us". Only leading phrases are removed, so
+     * a title that genuinely starts with "The" survives.
+     */
+    fun stripLeadingNoise(query: String): String {
+        var result = query.trim()
+        var trimmed = true
+        while (trimmed) {
+            trimmed = false
+            for (prefix in LEADING_NOISE) {
+                if (result.startsWith(prefix, ignoreCase = true) && result.length > prefix.length) {
+                    result = result.substring(prefix.length).trim()
+                    trimmed = true
+                }
+            }
+        }
+        return result.ifEmpty { query.trim() }
     }
 
     /**
@@ -69,13 +92,28 @@ object VoiceSearchMatcher {
      */
     fun rankQuery(tracks: List<MediaWrapper>, query: String): List<MediaWrapper> {
         if (tracks.isEmpty()) return emptyList()
-        val whole = rank(tracks, query, null)
+        // Several readings of the same utterance are plausible and nothing in
+        // the string says which is right, so score them all and keep the best.
         val parsed = parse(query)
-        if (parsed.artist == null) return whole
-        val split = rank(tracks, parsed.title, parsed.artist)
-        return if (bestScore(split, parsed.title, parsed.artist) >=
-            bestScore(whole, query, null)
-        ) split else whole
+        val readings = buildList {
+            add(query to null)
+            stripLeadingNoise(query).takeIf { it != query }?.let { add(it to null) }
+            if (parsed.artist != null) add(parsed.title to parsed.artist)
+            else if (parsed.title != query) add(parsed.title to null)
+        }
+        return readings
+            .map { (title, artist) -> rank(tracks, title, artist) to bestScoreOf(tracks, title, artist) }
+            .maxByOrNull { it.second }
+            ?.first
+            ?: emptyList()
+    }
+
+    /** Best score any track reaches for one reading of the query. */
+    private fun bestScoreOf(tracks: List<MediaWrapper>, title: String, artist: String?): Int {
+        val wantedTitle = normalize(title)
+        if (wantedTitle.isEmpty()) return 0
+        val wantedArtist = artist?.let { normalize(it) }
+        return tracks.maxOfOrNull { score(it, wantedTitle, wantedArtist) } ?: 0
     }
 
     /** Score of the best entry in an already ranked list, or zero if empty. */
@@ -177,7 +215,9 @@ object VoiceSearchMatcher {
      * punctuation removed, whitespace collapsed.
      */
     fun normalize(value: String): String {
-        val decomposed = Normalizer.normalize(value, Normalizer.Form.NFD)
+        // "rock & roll" and "rock and roll" have to compare equal, and the
+        // ampersand would otherwise be dropped as punctuation rather than read.
+        val decomposed = Normalizer.normalize(value.replace("&", " and "), Normalizer.Form.NFD)
         val builder = StringBuilder(decomposed.length)
         var lastWasSpace = true
         for (character in decomposed) {
@@ -199,10 +239,65 @@ object VoiceSearchMatcher {
                 else -> Unit
             }
         }
-        return builder.toString().trim().lowercase(Locale.ROOT)
+        return canonicaliseNumbers(builder.toString().trim().lowercase(Locale.ROOT))
+    }
+
+    /**
+     * Rewrite spoken numbers as digits, so "two of us" and "2 of us" compare
+     * equal. Applied to stored titles as well as to queries, so it does not
+     * matter which side spelled the number out.
+     */
+    private fun canonicaliseNumbers(text: String): String {
+        if (text.isEmpty()) return text
+        val tokens = text.split(' ')
+        if (tokens.none { it in NUMBER_WORDS || it in TENS_WORDS }) return text
+        val out = ArrayList<String>(tokens.size)
+        var i = 0
+        while (i < tokens.size) {
+            val tens = TENS_WORDS[tokens[i]]
+            if (tens != null) {
+                // "twenty one" is one number, not two.
+                val ones = tokens.getOrNull(i + 1)?.let { ONES_WORDS[it] }
+                if (ones != null) {
+                    out.add((tens + ones).toString())
+                    i += 2
+                    continue
+                }
+                out.add(tens.toString())
+                i++
+                continue
+            }
+            val number = NUMBER_WORDS[tokens[i]]
+            out.add(number?.toString() ?: tokens[i])
+            i++
+        }
+        return out.joinToString(" ")
     }
 
     private val BY_SEPARATORS = listOf(" by ", " from ")
+
+    /** Said around a title, never part of one. */
+    private val LEADING_NOISE = listOf(
+        "play ", "listen to ", "put on ", "start ",
+        "the song ", "song ", "the track ", "track ", "the tune ", "tune "
+    )
+
+    private val ONES_WORDS = mapOf(
+        "one" to 1, "two" to 2, "three" to 3, "four" to 4, "five" to 5,
+        "six" to 6, "seven" to 7, "eight" to 8, "nine" to 9
+    )
+
+    private val TENS_WORDS = mapOf(
+        "twenty" to 20, "thirty" to 30, "forty" to 40, "fifty" to 50,
+        "sixty" to 60, "seventy" to 70, "eighty" to 80, "ninety" to 90
+    )
+
+    private val NUMBER_WORDS = ONES_WORDS + TENS_WORDS + mapOf(
+        "zero" to 0, "ten" to 10, "eleven" to 11, "twelve" to 12,
+        "thirteen" to 13, "fourteen" to 14, "fifteen" to 15, "sixteen" to 16,
+        "seventeen" to 17, "eighteen" to 18, "nineteen" to 19,
+        "hundred" to 100, "thousand" to 1000
+    )
 
     private val COMBINING_RANGE = 0x0300..0x036F
 
