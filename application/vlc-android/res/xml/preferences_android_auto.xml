@@ -27,6 +27,15 @@
             app:min="50" />
 
         <ListPreference
+            android:defaultValue="name"
+            android:entries="@array/auto_track_sort_entries"
+            android:entryValues="@array/auto_track_sort_values"
+            android:key="android_auto_track_sort"
+            android:summary="@string/auto_track_sort_summary"
+            android:title="@string/auto_track_sort"
+            app:singleLineTitle="false" />
+
+        <ListPreference
             android:defaultValue="3"
             android:entries="@array/android_auto_queue_position"
             android:entryValues="@array/android_auto_queue_position_values"

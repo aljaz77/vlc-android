@@ -35,7 +35,9 @@ import kotlinx.coroutines.launch
 import org.videolan.resources.REMOTE_ACCESS_ONBOARDING
 import org.videolan.tools.KEY_ANDROID_AUTO_QUEUE_INFO_POS_VAL
 import org.videolan.tools.Settings
+import org.videolan.tools.KEY_ANDROID_AUTO_TRACK_SORT
 import org.videolan.vlc.PlaybackService
+import org.videolan.vlc.media.MediaSessionBrowser
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.dialogs.AboutVersionDialog
 import org.videolan.vlc.gui.dialogs.AutoInfoDialog
@@ -89,6 +91,13 @@ class PreferencesAndroidAuto : BasePreferenceFragment(), SharedPreferences.OnSha
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if (sharedPreferences == null || key == null) return
+
+        if (key == KEY_ANDROID_AUTO_TRACK_SORT) {
+            // The car caches browse results, so it keeps showing the old order
+            // until it is told the node changed.
+            PlaybackService.instance?.notifyChildrenChanged(MediaSessionBrowser.ID_TRACK)
+            PlaybackService.instance?.notifyChildrenChanged(MediaSessionBrowser.ID_LAST_ADDED)
+        }
 
         val mapOfKeys = mapOf(
                 "android_auto_queue_info_pos" to 3,

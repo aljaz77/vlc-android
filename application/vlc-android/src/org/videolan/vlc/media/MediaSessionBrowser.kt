@@ -59,6 +59,7 @@ import org.videolan.tools.toInt
 import org.videolan.vlc.ArtworkProvider
 import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
+import org.videolan.vlc.util.TrackSortOrder
 import org.videolan.vlc.gui.helpers.MediaComparators
 import org.videolan.vlc.gui.helpers.MediaComparators.formatArticles
 import org.videolan.vlc.isPathValid
@@ -276,28 +277,31 @@ class MediaSessionBrowser {
                     val artists = ml.getArtists(artistsShowAll, Medialibrary.SORT_ALPHA, false, false, false)
                     artists.sortWith(MediaComparators.ANDROID_AUTO)
                     if (page == null && artists.size > MAX_RESULT_SIZE)
-                        return paginateLibrary(artists, parentIdUri, res.getResourceUri(R.drawable.ic_auto_artist))
+                        return paginateLibrary(context, artists, parentIdUri, res.getResourceUri(R.drawable.ic_auto_artist))
                     list = artists.copyOfRange(pageOffset.coerceAtMost(artists.size), (pageOffset + MAX_RESULT_SIZE).coerceAtMost(artists.size))
                 }
                 ID_ALBUM -> {
                     val albums = ml.getAlbums(Medialibrary.SORT_ALPHA, false, false, false)
                     albums.sortWith(MediaComparators.ANDROID_AUTO)
                     if (page == null && albums.size > MAX_RESULT_SIZE)
-                        return paginateLibrary(albums, parentIdUri, res.getResourceUri(R.drawable.ic_auto_album), getContentStyle(CONTENT_STYLE_GRID_ITEM_HINT_VALUE))
+                        return paginateLibrary(context, albums, parentIdUri, res.getResourceUri(R.drawable.ic_auto_album), getContentStyle(CONTENT_STYLE_GRID_ITEM_HINT_VALUE))
                     list = albums.copyOfRange(pageOffset.coerceAtMost(albums.size), (pageOffset + MAX_RESULT_SIZE).coerceAtMost(albums.size))
                 }
                 ID_TRACK -> {
-                    val tracks = ml.getAudio(Medialibrary.SORT_ALPHA, false, false, false)
-                    tracks.sortWith(MediaComparators.ANDROID_AUTO)
+                    val order = TrackSortOrder.current(context)
+                    val tracks = ml.getAudio(order.mlSort, order.descending, false, false)
+                    // The Android Auto comparator sorts alphabetically, which
+                    // would undo any date ordering the user asked for.
+                    if (order == TrackSortOrder.NAME) tracks.sortWith(MediaComparators.ANDROID_AUTO)
                     if (page == null && tracks.size > MAX_RESULT_SIZE)
-                        return paginateLibrary(tracks, parentIdUri, res.getResourceUri(R.drawable.ic_auto_audio))
+                        return paginateLibrary(context, tracks, parentIdUri, res.getResourceUri(R.drawable.ic_auto_audio), alphabetical = order == TrackSortOrder.NAME)
                     list = tracks.copyOfRange(pageOffset.coerceAtMost(tracks.size), (pageOffset + MAX_RESULT_SIZE).coerceAtMost(tracks.size))
                 }
                 ID_GENRE -> {
                     val genres = ml.getGenres(Medialibrary.SORT_ALPHA, false, false, false)
                     genres.sortWith(MediaComparators.ANDROID_AUTO)
                     if (page == null && genres.size > MAX_RESULT_SIZE)
-                        return paginateLibrary(genres, parentIdUri, res.getResourceUri(R.drawable.ic_auto_genre))
+                        return paginateLibrary(context, genres, parentIdUri, res.getResourceUri(R.drawable.ic_auto_genre))
                     list = genres.copyOfRange(pageOffset.coerceAtMost(genres.size), (pageOffset + MAX_RESULT_SIZE).coerceAtMost(genres.size))
                 }
                 ID_PLAYLIST -> {
@@ -310,7 +314,16 @@ class MediaSessionBrowser {
                 }
                 ID_LAST_ADDED -> {
                     limitSize = true
-                    list = ml.getPagedAudio(Medialibrary.SORT_INSERTIONDATE, true, false, false, MAX_HISTORY_SIZE, 0)
+                    // Insertion date has almost no resolution for a library that
+                    // arrived in one scan: every track shares a timestamp, so the
+                    // order among them is arbitrary and looks random. Where the
+                    // user has asked for file dates, use those instead, which
+                    // actually distinguish one track from another.
+                    val order = TrackSortOrder.current(context)
+                    val sort = if (order == TrackSortOrder.FILE_DATE)
+                        Medialibrary.SORT_LASTMODIFICATIONDATE
+                    else Medialibrary.SORT_INSERTIONDATE
+                    list = ml.getPagedAudio(sort, true, false, false, MAX_HISTORY_SIZE, 0)
                 }
                 ID_HISTORY -> {
                     limitSize = true
@@ -672,7 +685,7 @@ class MediaSessionBrowser {
          * to avoid returning a parcel which exceeds the size limitations. We break the results into another
          * layer of browsable drill-downs labeled "start - finish" for each entry type.
          */
-        private fun paginateLibrary(mediaList: Array<out MediaLibraryItem>, parentIdUri: Uri, iconUri: Uri, extras: Bundle? = null): List<MediaBrowserCompat.MediaItem> {
+        private fun paginateLibrary(context: Context, mediaList: Array<out MediaLibraryItem>, parentIdUri: Uri, iconUri: Uri, extras: Bundle? = null, alphabetical: Boolean = true): List<MediaBrowserCompat.MediaItem> {
             val results: MutableList<MediaBrowserCompat.MediaItem> = ArrayList()
             /* Build menu items per group */
             for (page in 0..(mediaList.size / MAX_RESULT_SIZE)) {
@@ -680,7 +693,13 @@ class MediaSessionBrowser {
                 val lastOffset = (offset + MAX_RESULT_SIZE - 1).coerceAtMost(mediaList.size - 1)
                 if (offset >= lastOffset) break
                 val mediaDesc = MediaDescriptionCompat.Builder()
-                        .setTitle(buildRangeLabel(mediaList[offset].title, mediaList[lastOffset].title))
+                        .setTitle(
+                            // A first-to-last title range only helps when the list
+                            // is in alphabetical order. For a date ordering it is
+                            // noise, so say plainly which slice this is.
+                            if (alphabetical) buildRangeLabel(mediaList[offset].title, mediaList[lastOffset].title)
+                            else context.getString(R.string.auto_track_page_label, offset + 1, lastOffset + 1, mediaList.size)
+                        )
                         .setMediaId(parentIdUri.buildUpon().appendQueryParameter("p", "$page").toString())
                         .setIconUri(iconUri)
                         .setExtras(extras)

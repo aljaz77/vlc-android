@@ -548,6 +548,17 @@
         <item>replace</item>
     </string-array>
 
+    <string-array name="auto_track_sort_entries">
+        <item>@string/auto_track_sort_name</item>
+        <item>@string/auto_track_sort_date_added</item>
+        <item>@string/auto_track_sort_file_date</item>
+    </string-array>
+    <string-array name="auto_track_sort_values" translatable="false">
+        <item>name</item>
+        <item>date_added</item>
+        <item>file_date</item>
+    </string-array>
+
     <string-array name="normalization_performance_entries">
         <item>@string/normalization_performance_slow</item>
         <item>@string/normalization_performance_medium</item>
