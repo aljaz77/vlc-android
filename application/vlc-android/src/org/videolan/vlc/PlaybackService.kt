@@ -987,6 +987,24 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     }
 
     /**
+     * Insert tracks directly after the current one and start playing them,
+     * leaving the rest of the queue where it is.
+     *
+     * Unlike [playNow] this never jumps to a copy already in the queue. Jumping
+     * would consume everything between here and there, which for a shuffle of
+     * the whole library means skipping most of it; inserting keeps the running
+     * order intact and simply carries on afterwards.
+     *
+     * @return false if there is no queue to insert into
+     */
+    suspend fun insertAndPlayNext(media: List<MediaWrapper>): Boolean {
+        if (media.isEmpty() || !hasMedia()) return false
+        playlistManager.insertNext(media)
+        playlistManager.playIndex(playlistManager.currentIndex + 1)
+        return true
+    }
+
+    /**
      * Re-read the normalization preferences and push them into the device effect.
      *
      * Safe to call at any time: it attaches, retunes or detaches the effect as

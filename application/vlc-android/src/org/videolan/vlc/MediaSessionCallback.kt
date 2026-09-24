@@ -389,6 +389,28 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
     }
 
     /**
+     * Slot voice search results in after the current track, keeping the queue.
+     *
+     * Honours the same setting as tapping a track in a list, so whoever prefers
+     * the old replace-everything behaviour keeps it.
+     *
+     * @return true when it was handled, false when the caller should load normally
+     */
+    private suspend fun queueNext(media: List<MediaWrapper>): Boolean {
+        if (media.isEmpty()) return false
+        val keepQueue = when (PlayNowMode.current(Settings.getInstance(playbackService.applicationContext))) {
+            PlayNowMode.ALWAYS -> true
+            PlayNowMode.SHUFFLE -> playbackService.isShuffling
+            PlayNowMode.REPLACE -> false
+        }
+        if (!keepQueue) return false
+        if (playbackService.isCarMode()) {
+            media.forEach { it.addFlags(MediaWrapper.MEDIA_FORCE_AUDIO) }
+        }
+        return playbackService.insertAndPlayNext(media)
+    }
+
+    /**
      * Play one track while keeping the current queue, if the user's setting and
      * the player state allow it.
      *
@@ -475,7 +497,14 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
             playbackService.lifecycleScope.launch(Dispatchers.Main) {
                 when {
                     !tracks.isNullOrEmpty() -> {
-                        loadMedia(tracks?.toList(), if (vsp.isAny) SecureRandom().nextInt(min(tracks!!.size, MEDIALIBRARY_PAGE_SIZE)) else 0)
+                        val matched = tracks!!.toList()
+                        // Asking for one song in the middle of a shuffle used to
+                        // throw the queue away and leave nothing but that song,
+                        // which then stopped or repeated for ever. A request for
+                        // something specific slots in after the current track and
+                        // the queue carries on behind it.
+                        if (playSpecificTrack && queueNext(matched)) return@launch
+                        loadMedia(matched, if (vsp.isAny) SecureRandom().nextInt(min(matched.size, MEDIALIBRARY_PAGE_SIZE)) else 0)
                         when {
                             // Shuffling a request for one particular song would
                             // start playback somewhere else entirely.

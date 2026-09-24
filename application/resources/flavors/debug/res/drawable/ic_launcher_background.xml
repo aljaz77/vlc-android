@@ -15,18 +15,18 @@
                 android:type="linear">
                 <!-- green200 from top to green500 54% stop -->
                 <item
-                    android:color="@color/green200"
+                    android:color="#3E6FC4"
                     android:offset="0.0" />
                 <item
-                    android:color="@color/green500"
+                    android:color="#2451A8"
                     android:offset="0.54" />
                 <!-- green600 to 72% stop -->
                 <item
-                    android:color="@color/green600"
+                    android:color="#17387E"
                     android:offset="0.72" />
                 <!-- green800 to bottom -->
                 <item
-                    android:color="@color/green800"
+                    android:color="#0C2050"
                     android:offset="1.0" />
             </gradient>
 
