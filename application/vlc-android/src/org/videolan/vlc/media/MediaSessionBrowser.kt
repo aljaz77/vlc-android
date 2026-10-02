@@ -289,10 +289,7 @@ class MediaSessionBrowser {
                 }
                 ID_TRACK -> {
                     val order = TrackSortOrder.current(context)
-                    val tracks = ml.getAudio(order.mlSort, order.descending, false, false)
-                    // The Android Auto comparator sorts alphabetically, which
-                    // would undo any date ordering the user asked for.
-                    if (order == TrackSortOrder.NAME) tracks.sortWith(MediaComparators.ANDROID_AUTO)
+                    val tracks = orderedTracks(context)
                     if (page == null && tracks.size > MAX_RESULT_SIZE)
                         return paginateLibrary(context, tracks, parentIdUri, res.getResourceUri(R.drawable.ic_auto_audio), alphabetical = order == TrackSortOrder.NAME)
                     list = tracks.copyOfRange(pageOffset.coerceAtMost(tracks.size), (pageOffset + MAX_RESULT_SIZE).coerceAtMost(tracks.size))
@@ -314,16 +311,7 @@ class MediaSessionBrowser {
                 }
                 ID_LAST_ADDED -> {
                     limitSize = true
-                    // Insertion date has almost no resolution for a library that
-                    // arrived in one scan: every track shares a timestamp, so the
-                    // order among them is arbitrary and looks random. Where the
-                    // user has asked for file dates, use those instead, which
-                    // actually distinguish one track from another.
-                    val order = TrackSortOrder.current(context)
-                    val sort = if (order == TrackSortOrder.FILE_DATE)
-                        Medialibrary.SORT_LASTMODIFICATIONDATE
-                    else Medialibrary.SORT_INSERTIONDATE
-                    list = ml.getPagedAudio(sort, true, false, false, MAX_HISTORY_SIZE, 0)
+                    list = orderedLastAdded(context)
                 }
                 ID_HISTORY -> {
                     limitSize = true
@@ -436,6 +424,43 @@ class MediaSessionBrowser {
                 results.add(MediaBrowserCompat.MediaItem(emptyMediaDesc, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE))
             }
             return results
+        }
+
+        /**
+         * The library's audio tracks in the order the car's Tracks list shows them.
+         *
+         * Shared with playback deliberately. A browse list and the list the
+         * tapped position is resolved against must be the same list: the media
+         * id carries nothing but an index, so if the two are built differently
+         * then tapping the third row plays whatever happens to be third in the
+         * other ordering.
+         */
+        @WorkerThread
+        fun orderedTracks(context: Context): Array<MediaWrapper> {
+            val order = TrackSortOrder.current(context)
+            val tracks = Medialibrary.getInstance()
+                .getAudio(order.mlSort, order.descending, false, false)
+            // The Android Auto comparator sorts alphabetically, which would undo
+            // any date ordering the user asked for.
+            if (order == TrackSortOrder.NAME) tracks.sortWith(MediaComparators.ANDROID_AUTO)
+            return tracks
+        }
+
+        /**
+         * Recently added tracks, in the order the car's Last added list shows
+         * them. Shared with playback for the same reason as [orderedTracks].
+         */
+        @WorkerThread
+        fun orderedLastAdded(context: Context): Array<MediaWrapper> {
+            // Insertion date has almost no resolution for a library that arrived
+            // in one scan: every track shares a timestamp, so the order among
+            // them is arbitrary. Where the user has asked for file dates, use
+            // those, which actually distinguish one track from another.
+            val sort = if (TrackSortOrder.current(context) == TrackSortOrder.FILE_DATE)
+                Medialibrary.SORT_LASTMODIFICATIONDATE
+            else Medialibrary.SORT_INSERTIONDATE
+            return Medialibrary.getInstance()
+                .getPagedAudio(sort, true, false, false, MAX_HISTORY_SIZE, 0)
         }
 
         /**

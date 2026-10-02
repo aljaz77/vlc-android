@@ -296,7 +296,9 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
                         }
                     }
                     MediaSessionBrowser.ID_LAST_ADDED -> {
-                        val tracks = context.getFromMl { getPagedAudio(Medialibrary.SORT_INSERTIONDATE, true, false, false, MediaSessionBrowser.MAX_HISTORY_SIZE, 0) }
+                        // The same ordering the browse list was built with, or
+                        // the position in the media id points at a different track.
+                        val tracks = context.getFromMl { MediaSessionBrowser.orderedLastAdded(context) }
                         if (tracks.isNotEmpty() && isActive) {
                             loadMedia(tracks.toList(), position)
                         }
@@ -316,9 +318,10 @@ internal class MediaSessionCallback(private val playbackService: PlaybackService
                         }
                     }
                     MediaSessionBrowser.ID_TRACK -> {
-                        val tracks = context.getFromMl { audio }
+                        // The same ordering the browse list was built with, or
+                        // the position in the media id points at a different track.
+                        val tracks = context.getFromMl { MediaSessionBrowser.orderedTracks(context) }
                         if (tracks.isNotEmpty() && isActive) {
-                            tracks.sortWith(MediaComparators.ANDROID_AUTO)
                             val index = pageOffset + position
                             // Same rule as on the phone: picking one track out of
                             // a browse list should not throw away a shuffle-all or
